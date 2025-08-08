@@ -3,7 +3,7 @@ pipeline {
 
   environment {
     DOCKERHUB_REPO = "godemo2504/simple-node-swarm"
-    SSH_CREDENTIALS_ID = "swarm-master-ssh"        // ID des credentials SSH dans Jenkins
+    SSH_CREDENTIALS_ID = "swarm-master-ssh"
     SSH_HOST = "161.35.222.219"
     DEPLOY_PATH = "/tmp/docker-stack.yml"
   }
@@ -19,6 +19,7 @@ pipeline {
       steps {
         script {
           IMAGE_TAG = sh(script: "git rev-parse --short=7 HEAD", returnStdout: true).trim()
+          env.IMAGE_TAG = IMAGE_TAG // on le met dans env pour qu'il soit dispo partout
           echo "IMAGE_TAG = ${IMAGE_TAG}"
         }
       }
@@ -48,7 +49,8 @@ pipeline {
         sshagent([SSH_CREDENTIALS_ID]) {
           sh """
             ssh-keyscan -H ${SSH_HOST} >> ~/.ssh/known_hosts
-            scp docker/docker-stack.yml root@${SSH_HOST}:${DEPLOY_PATH}
+            scp docker/docker-stack.yml root@${SSH_HOST}:/tmp/docker-stack.yml.template
+            ssh root@${SSH_HOST} "export DOCKERHUB_REPO=${DOCKERHUB_REPO} IMAGE_TAG=${IMAGE_TAG} && envsubst < /tmp/docker-stack.yml.template > ${DEPLOY_PATH}"
             ssh root@${SSH_HOST} "docker stack deploy -c ${DEPLOY_PATH} simple-node-swarm"
           """
         }
