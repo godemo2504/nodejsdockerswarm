@@ -2,26 +2,17 @@ pipeline {
   agent any
 
   environment {
-    DOCKERHUB_REPO = "godemo2504/simple-node-swarm"  // <-- remplacer
+    DOCKERHUB_REPO = "godemo2504/simple-node-swarm"
     SSH_USER = "root"
-    SSH_HOST = "161.35.222.219"                   // <-- remplacer
+    SSH_HOST = "161.35.222.219"
     DEPLOY_DIR = "/root/deploy"
     IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
   }
 
   stages {
     stage('Checkout') {
-            steps {
-                git branch: 'main', 
-                    url: 'https://github.com/godemo2504/nodejsdockerswarm.git'
-            }
-        }
-    stage('Install & Test') {
       steps {
-        dir('app') {
-          sh 'npm install --no-audit --no-fund'
-          sh 'npm test || true'
-        }
+        checkout([$class: 'GitSCM', branches: [[name: 'main']], userRemoteConfigs: [[url: 'https://github.com/godemo2504/nodejsdockerswarm.git']]])
       }
     }
 
@@ -42,26 +33,18 @@ pipeline {
       }
     }
 
-    stage('Archive Artifact') {
-      steps {
-        archiveArtifacts artifacts: 'app/**', allowEmptyArchive: false
-      }
-    }
-
-    stage('Copy source to Swarm master (/root/deploy)') {
+    stage('Deploy to Swarm master') {
       steps {
         sshagent(credentials: ['swarm-master-ssh']) {
-          sh "scp -r app ${SSH_USER}@${SSH_HOST}:${DEPLOY_DIR}/${IMAGE_TAG}"
-          sh "ssh ${SSH_USER}@${SSH_HOST} \"ln -sfn ${DEPLOY_DIR}/${IMAGE_TAG} ${DEPLOY_DIR}/current || true\""
-        }
-      }
-    }
-
-    stage('Update Swarm stack') {
-      steps {
-        sshagent(credentials: ['swarm-master-ssh']) {
+          // Copier le fichier docker-stack.yml sur le serveur distant
           sh "scp docker/docker-stack.yml ${SSH_USER}@${SSH_HOST}:/tmp/docker-stack.yml"
-          sh "ssh ${SSH_USER}@${SSH_HOST} \"export DOCKERHUB_REPO=${DOCKERHUB_REPO} && export TAG=${IMAGE_TAG} && docker stack deploy -c /tmp/docker-stack.yml nodeapp_stack\""
+
+          // Déployer la stack en exportant les variables nécessaires
+          sh """
+            ssh ${SSH_USER}@${SSH_HOST} \\
+              "export DOCKERHUB_REPO=${DOCKERHUB_REPO} TAG=${IMAGE_TAG} && \\
+               docker stack deploy -c /tmp/docker-stack.yml nodeapp_stack"
+          """
         }
       }
     }
@@ -76,3 +59,4 @@ pipeline {
     }
   }
 }
+
