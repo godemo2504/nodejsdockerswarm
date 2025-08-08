@@ -3,15 +3,14 @@ pipeline {
 
   environment {
     DOCKERHUB_REPO = "godemo2504/simple-node-swarm"
-    SSH_USER = "root"
+    SSH_CREDENTIALS_ID = "root"        // ID des credentials SSH dans Jenkins
     SSH_HOST = "161.35.222.219"
-    DEPLOY_DIR = "/root/deploy"
+    DEPLOY_PATH = "/tmp/docker-stack.yml"
   }
 
   stages {
-    stage('Checkout') {
+    stage('Checkout SCM') {
       steps {
-        // On récupère le code et la config git
         checkout scm
       }
     }
@@ -19,10 +18,8 @@ pipeline {
     stage('Prepare variables') {
       steps {
         script {
-          // Récupérer le hash git court de la version checkoutée
-          def gitCommitShort = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
-          env.IMAGE_TAG = "${env.BUILD_NUMBER}-${gitCommitShort}"
-          echo "IMAGE_TAG = ${env.IMAGE_TAG}"
+          IMAGE_TAG = sh(script: "git rev-parse --short=7 HEAD", returnStdout: true).trim()
+          echo "IMAGE_TAG = ${IMAGE_TAG}"
         }
       }
     }
@@ -30,28 +27,29 @@ pipeline {
     stage('Build Docker Image') {
       steps {
         dir('app') {
-          sh "docker build -t ${DOCKERHUB_REPO}:${env.IMAGE_TAG} ."
+          sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
         }
       }
     }
 
     stage('Login DockerHub & Push') {
       steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
-          sh "echo $DH_PASS | docker login -u $DH_USER --password-stdin"
-          sh "docker push ${DOCKERHUB_REPO}:${env.IMAGE_TAG}"
+        withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
+          sh """
+            echo $DH_PASS | docker login -u $DH_USER --password-stdin
+            docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
+          """
         }
       }
     }
 
     stage('Deploy to Swarm master') {
       steps {
-        sshagent(credentials: ['swarm-master-ssh']) {
-          sh "scp docker/docker-stack.yml ${SSH_USER}@${SSH_HOST}:/tmp/docker-stack.yml"
+        sshagent([SSH_CREDENTIALS_ID]) {
           sh """
-            ssh ${SSH_USER}@${SSH_HOST} \\
-              "export DOCKERHUB_REPO=${DOCKERHUB_REPO} TAG=${env.IMAGE_TAG} && \\
-               docker stack deploy -c /tmp/docker-stack.yml nodeapp_stack"
+            ssh-keyscan -H ${SSH_HOST} >> ~/.ssh/known_hosts
+            scp docker/docker-stack.yml root@${SSH_HOST}:${DEPLOY_PATH}
+            ssh root@${SSH_HOST} "docker stack deploy -c ${DEPLOY_PATH} simple-node-swarm"
           """
         }
       }
@@ -59,11 +57,8 @@ pipeline {
   }
 
   post {
-    success {
-      echo "Déploiement terminé: ${DOCKERHUB_REPO}:${env.IMAGE_TAG}"
-    }
     failure {
-      echo "Pipeline échouée"
+      echo 'Pipeline échouée'
     }
   }
 }
