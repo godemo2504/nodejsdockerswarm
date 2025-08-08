@@ -1,0 +1,20 @@
+- hosts: swarm_master
+  become: yes
+  vars:
+    docker_stack_file: /tmp/docker-stack.yml
+    repo: "{{ lookup('env','DOCKERHUB_REPO') }}"
+    tag: "{{ lookup('env','TAG') }}"
+  tasks:
+    - name: Copy stack file
+      copy:
+        src: ../docker/docker-stack.yml
+        dest: "{{ docker_stack_file }}"
+        mode: '0644'
+
+    - name: Deploy stack with environment
+      shell: |
+        export DOCKERHUB_REPO={{ repo }}
+        export TAG={{ tag }}
+        docker stack deploy -c {{ docker_stack_file }} nodeapp_stack
+      args:
+        warn: false
