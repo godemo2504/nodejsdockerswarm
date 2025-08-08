@@ -2,18 +2,20 @@ pipeline {
   agent any
 
   environment {
-    DOCKERHUB_REPO = "yourdockerhubuser/simple-node-swarm"  // <-- remplacer
+    DOCKERHUB_REPO = "godemo2504/simple-node-swarm"  // <-- remplacer
     SSH_USER = "root"
-    SSH_HOST = "swarm-master.example.com"                   // <-- remplacer
+    SSH_HOST = "161.35.222.219"                   // <-- remplacer
     DEPLOY_DIR = "/root/deploy"
     IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
   }
 
   stages {
     stage('Checkout') {
-      steps { checkout scm }
-    }
-
+            steps {
+                git branch: 'main', 
+                    url: 'https://github.com/godemo2504/nodejsdockerswarm.git'
+            }
+        }
     stage('Install & Test') {
       steps {
         dir('app') {
