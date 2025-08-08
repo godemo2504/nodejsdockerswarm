@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   web:
-    image: ${DOCKERHUB_REPO}:${TAG}
+    image: "${DOCKERHUB_REPO}:${TAG}"
     ports:
       - target: 3000
         published: 80
