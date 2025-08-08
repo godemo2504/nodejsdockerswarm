@@ -9,7 +9,7 @@ services:
         protocol: tcp
         mode: host
     deploy:
-      replicas: 4
+      replicas: 2
       restart_policy:
         condition: on-failure
       update_config:
