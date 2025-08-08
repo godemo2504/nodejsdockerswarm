@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   web:
-    image: "${DOCKERHUB_REPO}:${TAG}"
+    image: "${DOCKERHUB_REPO}:${IMAGE_TAG}"
     ports:
       - target: 3000
         published: 80
@@ -16,10 +16,9 @@ services:
         parallelism: 1
         delay: 5s
     environment:
-      - APP_VERSION=${TAG}
+      - APP_VERSION=${IMAGE_TAG}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
       interval: 30s
       timeout: 10s
       retries: 3
-
