@@ -9,18 +9,21 @@ pipeline {
   }
 
   stages {
-    stage('Prepare variables') {
+    stage('Checkout') {
       steps {
-        script {
-          env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
-          echo "IMAGE_TAG = ${env.IMAGE_TAG}"
-        }
+        // On récupère le code et la config git
+        checkout scm
       }
     }
 
-    stage('Checkout') {
+    stage('Prepare variables') {
       steps {
-        git branch: 'main', url: 'https://github.com/godemo2504/nodejsdockerswarm.git'
+        script {
+          // Récupérer le hash git court de la version checkoutée
+          def gitCommitShort = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+          env.IMAGE_TAG = "${env.BUILD_NUMBER}-${gitCommitShort}"
+          echo "IMAGE_TAG = ${env.IMAGE_TAG}"
+        }
       }
     }
 
