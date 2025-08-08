@@ -5,11 +5,11 @@ services:
     image: "${DOCKERHUB_REPO}:${IMAGE_TAG}"
     ports:
       - target: 3000
-        published: 80
+        published: 3000
         protocol: tcp
         mode: host
     deploy:
-      replicas: 2
+      replicas: 4
       restart_policy:
         condition: on-failure
       update_config:
