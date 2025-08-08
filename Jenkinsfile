@@ -3,7 +3,7 @@ pipeline {
 
   environment {
     DOCKERHUB_REPO = "godemo2504/simple-node-swarm"
-    SSH_CREDENTIALS_ID = "root"        // ID des credentials SSH dans Jenkins
+    SSH_CREDENTIALS_ID = "swarm-master-ssh"        // ID des credentials SSH dans Jenkins
     SSH_HOST = "161.35.222.219"
     DEPLOY_PATH = "/tmp/docker-stack.yml"
   }
