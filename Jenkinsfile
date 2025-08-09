@@ -52,7 +52,8 @@ pipeline {
         sshagent([SSH_CREDENTIALS_ID]) {
           sh """
             ssh-keyscan -H ${SSH_HOST} >> ~/.ssh/known_hosts
-            scp docker/docker-stack.yml root@${SSH_HOST}:${DEPLOY_PATH}
+            scp docker/docker-stack.yml root@${SSH_HOST}:/tmp/docker-stack.yml.template
+            ssh root@${SSH_HOST} "export DOCKERHUB_REPO=${DOCKERHUB_REPO} IMAGE_TAG=${IMAGE_TAG} && envsubst < /tmp/docker-stack.yml.template > ${DEPLOY_PATH}"
             ssh root@${SSH_HOST} "docker stack deploy -c ${DEPLOY_PATH} simple-node-swarm"
           """
         }
