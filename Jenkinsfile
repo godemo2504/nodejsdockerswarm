@@ -9,7 +9,7 @@ pipeline {
     DOCKERHUB_REPO = "godemo2504/simple-node-swarm"
     SSH_CREDENTIALS_ID = "swarm-master-ssh"
     DEPLOY_PATH = "/tmp/docker-stack.yml"
-    SSH_HOST = "${params.SSH_HOST}"  // On récupère la valeur du paramètre
+    SSH_HOST = "${params.SSH_HOST}"
   }
 
   stages {
@@ -22,8 +22,9 @@ pipeline {
     stage('Prepare variables') {
       steps {
         script {
-          IMAGE_TAG = sh(script: "git rev-parse --short=7 HEAD", returnStdout: true).trim()
-          echo "IMAGE_TAG = ${IMAGE_TAG}"
+          def imageTagLocal = sh(script: "git rev-parse --short=7 HEAD", returnStdout: true).trim()
+          echo "IMAGE_TAG = ${imageTagLocal}"
+          env.IMAGE_TAG = imageTagLocal
         }
       }
     }
@@ -31,7 +32,7 @@ pipeline {
     stage('Build Docker Image') {
       steps {
         dir('app') {
-          sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
+          sh "docker build -t ${DOCKERHUB_REPO}:${env.IMAGE_TAG} ."
         }
       }
     }
@@ -39,10 +40,11 @@ pipeline {
     stage('Login DockerHub & Push') {
       steps {
         withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
-          sh """
-            echo \$DH_PASS | docker login -u \$DH_USER --password-stdin
+          // Attention : utilisation de quotes simples pour ne PAS interpréter la string en Groovy
+          sh '''
+            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
             docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
-          """
+          '''
         }
       }
     }
