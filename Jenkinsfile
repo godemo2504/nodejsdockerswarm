@@ -16,9 +16,9 @@ pipeline {
     stage('Prepare variables') {
       steps {
         script {
-          IMAGE_TAG = sh(script: "git rev-parse --short=7 HEAD", returnStdout: true).trim()
-          echo "IMAGE_TAG = ${IMAGE_TAG}"
-          env.IMAGE_TAG = IMAGE_TAG
+          def imageTagLocal = sh(script: "git rev-parse --short=7 HEAD", returnStdout: true).trim()
+     	  echo "IMAGE_TAG = ${imageTagLocal}"
+          env.IMAGE_TAG = imageTagLocal
         }
       }
     }
