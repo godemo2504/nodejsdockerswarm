@@ -17,7 +17,7 @@ pipeline {
       steps {
         script {
           def imageTagLocal = sh(script: "git rev-parse --short=7 HEAD", returnStdout: true).trim()
-     	  echo "IMAGE_TAG = ${imageTagLocal}"
+          echo "IMAGE_TAG = ${imageTagLocal}"
           env.IMAGE_TAG = imageTagLocal
         }
       }
@@ -26,7 +26,7 @@ pipeline {
     stage('Build Docker Image') {
       steps {
         dir('app') {
-          sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
+          sh "docker build -t ${DOCKERHUB_REPO}:$IMAGE_TAG ."
         }
       }
     }
@@ -36,7 +36,7 @@ pipeline {
         withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
           sh '''
             echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
-            docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
+            docker push ${DOCKERHUB_REPO}:$IMAGE_TAG
           '''
         }
       }
