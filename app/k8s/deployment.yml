@@ -14,10 +14,9 @@ spec:
     spec:
       containers:
       - name: simple-node
-        image: ${DOCKERHUB_REPO}:${IMAGE_TAG}   # image Docker avec tag dynamique
+        image: ${DOCKERHUB_REPO}:${IMAGE_TAG}
         ports:
         - containerPort: 3000
-
 ---
 apiVersion: v1
 kind: Service
@@ -26,8 +25,8 @@ metadata:
 spec:
   selector:
     app: simple-node
+  type: NodePort
   ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 3000
-  type: LoadBalancer
+    - port: 80
+      targetPort: 3000
+      nodePort: 32000
