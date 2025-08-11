@@ -3,7 +3,6 @@ pipeline {
 
   environment {
     DOCKERHUB_REPO = "godemo2504/simple-node-swarm"
-    IMAGE_TAG = ""
   }
 
   stages {
@@ -16,14 +15,19 @@ pipeline {
     stage('Prepare variables') {
       steps {
         script {
-          sh 'pwd && ls -la'
           def imageTagLocal = sh(script: "git rev-parse --short=7 HEAD", returnStdout: true).trim()
           echo "imageTagLocal = '${imageTagLocal}'"
           if (imageTagLocal == null || imageTagLocal == '') {
             error("Impossible de récupérer le commit git pour IMAGE_TAG")
           }
-          env.IMAGE_TAG = imageTagLocal
-          echo "IMAGE_TAG set to ${env.IMAGE_TAG}"
+          // stocke dans une variable locale Groovy (pas env)
+          env.IMAGE_TAG = imageTagLocal  // utile si tu veux garder en env aussi
+          // mais privilégie la variable locale
+          script {
+            // pour partage entre stages
+            IMAGE_TAG = imageTagLocal
+          }
+          echo "IMAGE_TAG set to ${IMAGE_TAG}"
         }
       }
     }
@@ -31,7 +35,9 @@ pipeline {
     stage('Build Docker Image') {
       steps {
         dir('app') {
-          sh "docker build -t ${DOCKERHUB_REPO}:${env.IMAGE_TAG} ."
+          script {
+            sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
+          }
         }
       }
     }
@@ -39,22 +45,25 @@ pipeline {
     stage('Login DockerHub & Push') {
       steps {
         withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
-          sh """
-            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
-            docker push ${DOCKERHUB_REPO}:${env.IMAGE_TAG}
-          """
+          script {
+            sh """
+              echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
+              docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
+            """
+          }
         }
       }
     }
 
     stage('Deploy to Kubernetes') {
       steps {
-        withCredentials([string(credentialsId: 'kubeconfig-credentials-id', variable: 'KUBECONFIG_CONTENT')]) {
-          sh """
-            echo "$KUBECONFIG_CONTENT" > kubeconfig_tmp
-            export KUBECONFIG=\$(pwd)/kubeconfig_tmp
-            envsubst < app/k8s/deployment.yml | kubectl apply -f -
-          """
+        withCredentials([file(credentialsId: 'kubeconfig-credentials-id', variable: 'KUBECONFIG_FILE')]) {
+          script {
+            sh """
+              export KUBECONFIG=${KUBECONFIG_FILE}
+              envsubst < app/k8s/deployment.yml | kubectl apply -f -
+            """
+          }
         }
       }
     }
