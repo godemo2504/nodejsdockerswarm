@@ -16,9 +16,9 @@ pipeline {
     stage('Prepare variables') {
       steps {
         script {
-          def imageTagLocal = sh(script: "git rev-parse --short=7 HEAD", returnStdout: true).trim()
-          echo "IMAGE_TAG = ${imageTagLocal}"
-          env.IMAGE_TAG = imageTagLocal
+          def tag = sh(script: "git rev-parse --short=7 HEAD", returnStdout: true).trim()
+          env.IMAGE_TAG = tag
+          echo "IMAGE_TAG set to ${env.IMAGE_TAG}"
         }
       }
     }
@@ -26,6 +26,8 @@ pipeline {
     stage('Build Docker Image') {
       steps {
         dir('app') {
+          // Utilise double quotes pour que Groovy évalue DOCKERHUB_REPO
+          // et shell remplace $IMAGE_TAG à l'exécution
           sh "docker build -t ${DOCKERHUB_REPO}:$IMAGE_TAG ."
         }
       }
