@@ -31,7 +31,7 @@ pipeline {
     stage('Build Docker Image') {
       steps {
         dir('app') {
-          sh "docker build -t ${DOCKERHUB_REPO}:$IMAGE_TAG ."
+          sh "docker build -t ${DOCKERHUB_REPO}:${env.IMAGE_TAG} ."
         }
       }
     }
@@ -39,10 +39,10 @@ pipeline {
     stage('Login DockerHub & Push') {
       steps {
         withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
-          sh '''
+          sh """
             echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
-            docker push ${DOCKERHUB_REPO}:$IMAGE_TAG
-          '''
+            docker push ${DOCKERHUB_REPO}:${env.IMAGE_TAG}
+          """
         }
       }
     }
@@ -50,11 +50,11 @@ pipeline {
     stage('Deploy to Kubernetes') {
       steps {
         withCredentials([string(credentialsId: 'kubeconfig-credentials-id', variable: 'KUBECONFIG_CONTENT')]) {
-          sh '''
+          sh """
             echo "$KUBECONFIG_CONTENT" > kubeconfig_tmp
-            export KUBECONFIG=$(pwd)/kubeconfig_tmp
+            export KUBECONFIG=\$(pwd)/kubeconfig_tmp
             envsubst < app/k8s/deployment.yml | kubectl apply -f -
-          '''
+          """
         }
       }
     }
