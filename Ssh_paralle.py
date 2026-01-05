@@ -151,3 +151,9 @@ while True:
         executor.map(lambda s: ssh_cmd(s, cmd, user), servers)
 
     print(f"{G}=== Fin d'exécution ==={W}")
+
+
+repoServer:
+  livenessProbe: null
+  readinessProbe: null
+
