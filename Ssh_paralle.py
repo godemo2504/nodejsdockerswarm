@@ -155,5 +155,38 @@ while True:
 
 repoServer:
   livenessProbe: null
-  readinessProbe: null
+  readinessProbe: nullnull
+
+[serveurs]
+srv1 ansible_host=10.0.0.1
+srv2 ansible_host=10.0.0.2
+srv3 ansible_host=10.0.0.3
+srv4 ansible_host=10.0.0.4
+srv5 ansible_host=10.0.0.5
+srv6 ansible_host=10.0.0.6
+
+
+- name: Installation ANNUAIRE ACR
+  hosts: serveurs
+  become: yes
+  tasks:
+
+    - name: Aller dans le répertoire d'installation
+      command: cd /produits/install
+      args:
+        chdir: /produits/install
+
+    - name: Dézipper l'archive
+      unarchive:
+        src: /tmp/ANNUAIRE-ACR_2.07.02.zip
+        dest: /produits/install
+        remote_src: yes
+
+    - name: Extraire le fichier tgz
+      command: tar xzvf installation_annuaire_ACR_V2.tgz
+      args:
+        chdir: /produits/install/ANNUAIRE-ACR_2.07.02/SOURCES
+
+
+
 
