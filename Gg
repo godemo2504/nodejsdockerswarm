@@ -244,3 +244,47 @@ replication:
       failed_when: false
       changed_when: "'already exists' not in pvesm_add.stderr"
 
+
+
+
+---
+- name: Déclarer stockage ZFS dans Proxmox
+  hosts: proxmox
+  become: true
+  vars_files:
+    - ../group_vars/proxmox.yml
+
+  tasks:
+
+    - name: Vérifier variables obligatoires
+      assert:
+        that:
+          - zfs_pool is defined
+          - zfs_disks is defined
+          - zfs_storage_id is defined
+          - zfs_mountpoint is defined
+
+    - name: Vérifier si le pool ZFS existe
+      command: zpool list {{ zfs_pool }}
+      register: zpool_check
+      failed_when: false
+      changed_when: false
+
+    - name: Créer le pool ZFS
+      command: >
+        zpool create {{ zfs_pool }}
+        {{ zfs_disks | join(' ') }}
+      when: zpool_check.rc != 0
+
+    - name: Créer le mountpoint
+      file:
+        path: "{{ zfs_mountpoint }}"
+        state: directory
+
+    - name: Ajouter le storage ZFS dans Proxmox
+      command: >
+        pvesm add zfspool {{ zfs_storage_id }}
+        --pool {{ zfs_pool }}
+        --content images,rootdir
+      register: pvesm_add
+      failed_when: false
