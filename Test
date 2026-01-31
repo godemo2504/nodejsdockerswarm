@@ -1,0 +1,53 @@
+fix-proxmox-repo-and-reboot.yml
+
+
+---
+- name: Fix dépôt Proxmox + reboot contrôlé
+  hosts: proxmox
+  become: true
+
+  vars:
+    reboot_enabled: true
+
+  tasks:
+
+    # 🚨 CRITIQUE : supprimer le dépôt enterprise AVANT tout apt update
+    - name: Supprimer le dépôt Proxmox Enterprise (401 fix)
+      file:
+        path: /etc/apt/sources.list.d/pve-enterprise.list
+        state: absent
+
+    - name: Supprimer ancienne entrée enterprise éventuelle
+      lineinfile:
+        path: /etc/apt/sources.list
+        regexp: 'enterprise\.proxmox\.com'
+        state: absent
+
+    - name: Forcer le dépôt Proxmox no-subscription
+      copy:
+        dest: /etc/apt/sources.list.d/pve-no-subscription.list
+        content: |
+          deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription
+        mode: '0644'
+
+    # ✅ Maintenant seulement, on peut faire apt update
+    - name: Mise à jour APT après correction des dépôts
+      apt:
+        update_cache: yes
+
+    # 🔁 Reboot final (kernel Proxmox)
+    - name: Reboot des nœuds Proxmox
+      when: reboot_enabled | bool
+      reboot:
+        msg: "Reboot post-install Proxmox (kernel + dépôts corrigés)"
+        reboot_timeout: 600
+
+
+fix_proxmox_repo_and_reboot:
+  stage: proxmox
+  tags:
+    - rocky
+  script:
+    - cd ansible
+    - ansible-playbook playbooks/fix-proxmox-repo-and-reboot.yml
+  when: manual
