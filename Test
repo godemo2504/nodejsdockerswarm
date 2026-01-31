@@ -180,3 +180,29 @@ join_proxmox_cluster:
     - name: Rejoindre le cluster Proxmox
       command: pvecm add {{ master_ip }} -force
       when: "'Cluster information' not in node_status.stdout"
+
+
+
+
+
+---
+- name: Ajouter les nœuds au cluster Proxmox
+  hosts: proxmox_nodes
+  become: true
+
+  vars:
+    master_ip: 10.0.0.5
+
+  tasks:
+    - name: Vérifier si le nœud est déjà dans un cluster
+      command: pvecm status
+      register: node_status
+      failed_when: false
+      changed_when: false
+
+    - name: Rejoindre le cluster Proxmox (non interactif)
+      command: >
+        pvecm add {{ master_ip }}
+        -force
+        --use_ssh
+      when: "'Cluster information' not in node_status.stdout"
