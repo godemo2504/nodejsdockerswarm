@@ -426,3 +426,89 @@ srv6 ansible_host=10.0.0.6
       reboot:
         msg: "Reboot requis après installation de Proxmox VE"
         reboot_timeout: 600
+
+
+
+
+---
+- name: Installation de Proxmox VE sur Debian 12 Bookworm
+  hosts: proxmox
+  become: true
+
+  vars:
+    # Dépôt Proxmox officiel (no-subscription)
+    proxmox_repo: "deb [arch=amd64] http://download.proxmox.com/debian/pve bookworm pve-no-subscription"
+    proxmox_repo_file: "/etc/apt/sources.list.d/pve-install-repo.list"
+
+    # Clé GPG Proxmox officielle Bookworm
+    proxmox_gpg_url: "https://enterprise.proxmox.com/debian/proxmox-release-bookworm.gpg"
+    proxmox_gpg_dest: "/etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg"
+
+    # Sécurité CI : reboot désactivé par défaut
+    reboot_enabled: false
+
+  tasks:
+
+    - name: Mise à jour initiale du cache APT
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Installer les prérequis système
+      apt:
+        name:
+          - wget
+          - gnupg
+          - ca-certificates
+        state: present
+
+    - name: Télécharger la clé GPG Proxmox (Bookworm)
+      get_url:
+        url: "{{ proxmox_gpg_url }}"
+        dest: "{{ proxmox_gpg_dest }}"
+        mode: '0644'
+
+    - name: Ajouter le dépôt Proxmox VE no-subscription
+      copy:
+        dest: "{{ proxmox_repo_file }}"
+        content: "{{ proxmox_repo }}\n"
+        mode: '0644'
+
+    - name: Mettre à jour APT après ajout du dépôt Proxmox
+      apt:
+        update_cache: yes
+
+    - name: Mise à jour complète du système
+      apt:
+        upgrade: full
+
+    - name: Installer Proxmox VE (meta-package officiel)
+      apt:
+        name: proxmox-ve
+        state: present
+      notify: Maybe reboot server
+
+    # 🔥 FIX CRITIQUE : dépôt enterprise ajouté automatiquement par Proxmox
+    - name: Désactiver le dépôt Proxmox Enterprise (sans abonnement)
+      file:
+        path: /etc/apt/sources.list.d/pve-enterprise.list
+        state: absent
+
+    - name: Forcer le dépôt Proxmox no-subscription
+      copy:
+        dest: /etc/apt/sources.list.d/pve-no-subscription.list
+        content: |
+          deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription
+        mode: '0644'
+
+    - name: Mise à jour APT après correction des dépôts Proxmox
+      apt:
+        update_cache: yes
+
+  handlers:
+
+    - name: Maybe reboot server
+      when: reboot_enabled | bool
+      reboot:
+        msg: "Reboot requis après installation de Proxmox VE"
+        reboot_timeout: 600
