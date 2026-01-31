@@ -360,3 +360,69 @@ srv6 ansible_host=10.0.0.6
       reboot:
         msg: "Reboot requis après installation de Proxmox VE"
         reboot_timeout: 600
+
+
+
+
+
+
+---
+- name: Installation de Proxmox VE sur Debian 12 Bookworm
+  hosts: proxmox
+  become: true
+
+  vars:
+    proxmox_repo: "deb [arch=amd64] http://download.proxmox.com/debian/pve bookworm pve-no-subscription"
+    proxmox_repo_file: "/etc/apt/sources.list.d/pve-install-repo.list"
+    proxmox_gpg_url: "https://enterprise.proxmox.com/debian/proxmox-release-bookworm.gpg"
+    proxmox_gpg_dest: "/etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg"
+    reboot_enabled: false   # passe à true après validation
+
+  tasks:
+
+    - name: Mise à jour initiale du cache APT
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Installer les prérequis
+      apt:
+        name:
+          - wget
+          - gnupg
+          - ca-certificates
+        state: present
+
+    - name: Télécharger la clé GPG Proxmox
+      get_url:
+        url: "{{ proxmox_gpg_url }}"
+        dest: "{{ proxmox_gpg_dest }}"
+        mode: '0644'
+
+    - name: Ajouter le dépôt Proxmox VE
+      copy:
+        dest: "{{ proxmox_repo_file }}"
+        content: "{{ proxmox_repo }}\n"
+        mode: '0644'
+
+    - name: Mettre à jour APT après ajout du repo Proxmox
+      apt:
+        update_cache: yes
+
+    - name: Upgrade du système
+      apt:
+        upgrade: full
+
+    - name: Installer Proxmox VE (meta-package officiel)
+      apt:
+        name: proxmox-ve
+        state: present
+      notify: Maybe reboot server
+
+  handlers:
+
+    - name: Maybe reboot server
+      when: reboot_enabled | bool
+      reboot:
+        msg: "Reboot requis après installation de Proxmox VE"
+        reboot_timeout: 600
