@@ -24,3 +24,41 @@ chmod +x tofu-provider-libvirt_v0.9.1
 sudo chown -R root:root /opt/tofu-provider-mirror
 sudo chmod -R 755 /opt/tofu-provider-mirror
 sudo chown -R $USER:$USER /opt/tofu-provider-mirror
+
+
+
+---
+- name: Installer QNetd (serveur QDevice)
+  hosts: qdevice
+  become: true
+  tasks:
+    - name: Installer corosync-qnetd
+      apt:
+        name: corosync-qnetd
+        state: present
+        update_cache: yes
+
+    - name: Activer et démarrer qnetd
+      systemd:
+        name: corosync-qnetd
+        enabled: yes
+        state: started
+
+- name: Installer outils QDevice côté Proxmox
+  hosts: proxmox_master
+  become: true
+  tasks:
+    - name: Installer corosync-qdevice
+      apt:
+        name: corosync-qdevice
+        state: present
+        update_cache: yes
+
+    - name: Vérifier si QDevice est déjà présent
+      command: pvecm status
+      register: pvecm_status
+      changed_when: false
+
+    - name: Ajouter le QDevice au cluster
+      command: pvecm qdevice setup 10.0.0.3
+      when: "'QDevice' not in pvecm_status.stdout"
