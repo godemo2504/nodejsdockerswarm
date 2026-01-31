@@ -139,3 +139,44 @@ join_proxmox_cluster:
     - cd ansible
     - ansible-playbook playbooks/proxmox-cluster-join.yml
   when: manual
+
+
+---
+- name: Création du cluster Proxmox
+  hosts: proxmox_master
+  become: true
+
+  vars:
+    cluster_name: proxmox-cluster
+
+  tasks:
+    - name: Vérifier si le cluster existe déjà
+      command: pvecm status
+      register: cluster_status
+      failed_when: false
+      changed_when: false
+
+    - name: Créer le cluster Proxmox
+      command: pvecm create {{ cluster_name }}
+      when: "'Cluster information' not in cluster_status.stdout"
+
+
+
+---
+- name: Ajouter les nœuds au cluster Proxmox
+  hosts: proxmox_nodes
+  become: true
+
+  vars:
+    master_ip: 10.0.0.3   # IP du proxmox1
+
+  tasks:
+    - name: Vérifier si le nœud est déjà dans un cluster
+      command: pvecm status
+      register: node_status
+      failed_when: false
+      changed_when: false
+
+    - name: Rejoindre le cluster Proxmox
+      command: pvecm add {{ master_ip }} -force
+      when: "'Cluster information' not in node_status.stdout"
