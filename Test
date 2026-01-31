@@ -206,3 +206,30 @@ join_proxmox_cluster:
         -force
         --use_ssh
       when: "'Cluster information' not in node_status.stdout"
+
+
+
+
+---
+- name: Rejoindre le cluster Proxmox
+  hosts: proxmox_nodes
+  become: true
+
+  vars:
+    master_ip: 10.0.0.5
+    corosync_bind_ip: "{{ ansible_default_ipv4.address }}"
+
+  tasks:
+    - name: Vérifier si le noeud est déjà dans un cluster
+      command: pvecm status
+      register: pvecm_status
+      failed_when: false
+      changed_when: false
+
+    - name: Rejoindre le cluster Proxmox
+      command: >
+        pvecm add {{ master_ip }}
+        --use_ssh
+        --force
+        --link0 {{ corosync_bind_ip }}
+      when: "'does not exist' in pvecm_status.stderr"
