@@ -62,3 +62,89 @@ sudo chown -R $USER:$USER /opt/tofu-provider-mirror
     - name: Ajouter le QDevice au cluster
       command: pvecm qdevice setup 10.0.0.3
       when: "'QDevice' not in pvecm_status.stdout"
+
+
+
+cluster_name: proxmox-cluster
+zfs_pool: rpool_vm
+zfs_disk: /dev/sdb
+replication_schedule: "*/5"
+
+
+- name: Préparer les nœuds Proxmox
+  hosts: proxmox_master,proxmox_nodes
+  become: true
+
+  tasks:
+    - name: Installer paquets requis
+      apt:
+        name:
+          - zfsutils-linux
+          - corosync
+          - pve-cluster
+        state: present
+        update_cache: yes
+
+- name: Créer pool ZFS local
+  hosts: proxmox_master,proxmox_nodes
+  become: true
+
+  tasks:
+    - name: Vérifier si le pool existe
+      command: zpool list {{ zfs_pool }}
+      register: zpool_check
+      failed_when: false
+      changed_when: false
+
+    - name: Créer le pool ZFS
+      command: zpool create -f {{ zfs_pool }} {{ zfs_disk }}
+      when: zpool_check.rc != 0
+
+- name: Déclarer stockage ZFS dans Proxmox
+  hosts: proxmox_master
+  become: true
+
+  tasks:
+    - name: Ajouter le stockage ZFS
+      command: >
+        pvesm add zfspool {{ zfs_pool }}
+        --pool {{ zfs_pool }}
+        --content images,rootdir
+        --sparse 1
+      ignore_errors: true
+
+
+- name: Créer réplication ZFS
+  hosts: proxmox_master
+  become: true
+
+  tasks:
+    - name: Créer job de réplication (exemple VM 100)
+      command: >
+        pvesr create-local-job 100 proxmox2
+        --schedule "{{ replication_schedule }}"
+      ignore_errors: true
+
+
+
+
+stages:
+  - proxmox
+
+image: python:3.11
+
+before_script:
+  - pip install ansible
+
+proxmox_cluster:
+  stage: proxmox
+  script:
+    - cd ansible
+    - ansible-playbook playbooks/01-prerequisites.yml
+    - ansible-playbook playbooks/02-zfs.yml
+    - ansible-playbook playbooks/03-proxmox-cluster.yml
+    - ansible-playbook playbooks/04-qdevice.yml
+    - ansible-playbook playbooks/05-storage.yml
+    - ansible-playbook playbooks/06-replication.yml
+  only:
+    - main
