@@ -51,3 +51,33 @@
         --target {{ replication.target }}
         --schedule "{{ replication.schedule }}"
       when: "'VM:' ~ vmid not in pvesr_status.stdout"
+
+
+pre_tasks:
+    - name: Vérifier que la variable replication est définie
+      assert:
+        that:
+          - replication is defined
+          - replication.vmid is defined
+          - replication.target_node is defined
+          - replication.schedule is defined
+        fail_msg: >
+          La variable 'replication' n'est pas correctement définie
+          dans group_vars/proxmox.yml
+
+  tasks:
+    - name: Vérifier si la réplication existe déjà
+      command: >
+        pvesr status
+      register: replication_status
+      changed_when: false
+
+    - name: Créer job de réplication ZFS
+      command: >
+        pvesr create
+        {{ replication.vmid }}
+        {{ replication.target_node }}
+        --schedule {{ replication.schedule }}
+        --rate {{ replication.rate_limit | default(0) }}
+      when: >
+        replication.vmid | string not in replication_status.stdout
