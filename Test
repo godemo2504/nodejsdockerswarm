@@ -233,3 +233,43 @@ join_proxmox_cluster:
         --force
         --link0 {{ corosync_bind_ip }}
       when: "'does not exist' in pvecm_status.stderr"
+
+
+
+
+inventory/hosts.ini
+Copier le code
+Ini
+[qdevice]
+10.0.0.10 ansible_user=root
+
+[proxmox_master]
+10.0.0.5 ansible_user=root
+📄 playbooks/proxmox-qdevice.yml
+Copier le code
+Yaml
+---
+- name: Installer et démarrer QDevice
+  hosts: qdevice
+  become: true
+  tasks:
+    - name: Installer corosync-qnetd
+      apt:
+        name: corosync-qnetd
+        state: present
+        update_cache: yes
+
+    - name: Démarrer le service qnetd
+      systemd:
+        name: corosync-qnetd
+        enabled: yes
+        state: started
+
+- name: Ajouter le QDevice au cluster Proxmox
+  hosts: proxmox_master
+  become: true
+  tasks:
+    - name: Ajouter QDevice (idempotent)
+      command: pvecm qdevice setup 10.0.0.10
+      args:
+        creates: /etc/corosync/qdevice/net.conf
