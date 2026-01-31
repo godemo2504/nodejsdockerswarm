@@ -1,0 +1,53 @@
+- name: Declarer stockage ZFS dans Proxmox
+  hosts: proxmox_zfs
+  become: true
+  vars:
+    zfs_pool: rpool_vm
+    zfs_device: /dev/sdc
+    pve_storage_id: zfs-rpool-vm
+
+  tasks:
+    - name: Vérifier si le pool ZFS existe
+      command: zpool list {{ zfs_pool }}
+      register: zpool_check
+      failed_when: false
+      changed_when: false
+
+    - name: Créer le pool ZFS
+      command: zpool create {{ zfs_pool }} {{ zfs_device }}
+      when: zpool_check.rc != 0
+
+    - name: Vérifier si le storage Proxmox existe
+      command: pvesm status --storage {{ pve_storage_id }}
+      register: pvesm_check
+      failed_when: false
+      changed_when: false
+
+    - name: Ajouter le storage ZFS dans Proxmox
+      command: >
+        pvesm add zfspool {{ pve_storage_id }}
+        --pool {{ zfs_pool }}
+        --content images,rootdir
+      when: pvesm_check.rc != 0
+
+
+
+- name: Creer replication ZFS
+  hosts: proxmox_master
+  become: true
+  vars:
+    vmid: 100
+    zfs_pool: rpool_vm
+
+  tasks:
+    - name: Vérifier si la réplication existe déjà
+      command: pvesr status
+      register: pvesr_status
+      changed_when: false
+
+    - name: Créer job de réplication ZFS
+      command: >
+        pvesr create {{ vmid }}
+        --target {{ replication.target }}
+        --schedule "{{ replication.schedule }}"
+      when: "'VM:' ~ vmid not in pvesr_status.stdout"
