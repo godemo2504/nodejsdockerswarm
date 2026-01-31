@@ -51,3 +51,91 @@ fix_proxmox_repo_and_reboot:
     - cd ansible
     - ansible-playbook playbooks/fix-proxmox-repo-and-reboot.yml
   when: manual
+
+
+ansible/group_vars/proxmox.yml
+👉 Centralise les paramètres du cluster (BEST PRACTICE)
+Copier le code
+Yaml
+cluster_name: proxmox-cluster
+proxmox_master_ip: 10.0.0.3
+📄 ansible/inventory/prod.ini
+Copier le code
+Ini
+[proxmox_master]
+proxmox1 ansible_host=10.0.0.3
+
+[proxmox_nodes]
+proxmox2 ansible_host=10.0.0.4
+
+[proxmox:children]
+proxmox_master
+proxmox_nodes
+📄 ansible/playbooks/proxmox-cluster-create.yml
+Copier le code
+Yaml
+---
+- name: Création du cluster Proxmox
+  hosts: proxmox_master
+  become: true
+
+  tasks:
+    - name: Vérifier si le cluster existe déjà
+      command: pvecm status
+      register: cluster_status
+      failed_when: false
+      changed_when: false
+
+    - name: Créer le cluster Proxmox
+      command: pvecm create {{ cluster_name }}
+      when: "'Cluster information' not in cluster_status.stdout"
+📄 ansible/playbooks/proxmox-cluster-join.yml
+Copier le code
+Yaml
+---
+- name: Ajout des nœuds au cluster Proxmox
+  hosts: proxmox_nodes
+  become: true
+
+  tasks:
+    - name: Vérifier si le nœud est déjà dans un cluster
+      command: pvecm status
+      register: node_status
+      failed_when: false
+      changed_when: false
+
+    - name: Rejoindre le cluster Proxmox
+      command: pvecm add {{ proxmox_master_ip }} -force
+      when: "'Cluster information' not in node_status.stdout"
+📄 ansible/ansible.cfg
+Copier le code
+Ini
+[defaults]
+inventory = inventory/prod.ini
+host_key_checking = False
+retry_files_enabled = False
+interpreter_python = auto
+🚀 .gitlab-ci.yml (rappel — cluster stage)
+Copier le code
+Yaml
+stages:
+  - proxmox
+  - cluster
+
+create_proxmox_cluster:
+  stage: cluster
+  tags:
+    - rocky
+  script:
+    - cd ansible
+    - ansible-playbook playbooks/proxmox-cluster-create.yml
+  when: manual
+
+join_proxmox_cluster:
+  stage: cluster
+  tags:
+    - rocky
+  script:
+    - cd ansible
+    - ansible-playbook playbooks/proxmox-cluster-join.yml
+  when: manual
