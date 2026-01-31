@@ -167,3 +167,64 @@ srv6 ansible_host=10.0.0.6
 
 
 - 
+
+---
+- name: Installation de Proxmox VE sur Debian Trixie
+  hosts: proxmox
+  become: true
+
+  vars:
+    proxmox_repo: "deb [arch=amd64] http://download.proxmox.com/debian/pve trixie pve-no-subscription"
+    proxmox_repo_file: "/etc/apt/sources.list.d/pve-install-repo.list"
+    proxmox_gpg_url: "https://enterprise.proxmox.com/debian/proxmox-release-trixie.gpg"
+    proxmox_gpg_dest: "/etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg"
+    reboot_enabled: false   # 🔐 sécurité CI
+
+  tasks:
+
+    - name: Mise à jour du cache APT
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Installer wget
+      apt:
+        name: wget
+        state: present
+
+    - name: Télécharger la clé GPG Proxmox
+      get_url:
+        url: "{{ proxmox_gpg_url }}"
+        dest: "{{ proxmox_gpg_dest }}"
+        mode: '0644'
+
+    - name: Ajouter le dépôt Proxmox VE
+      copy:
+        dest: "{{ proxmox_repo_file }}"
+        content: "{{ proxmox_repo }}\n"
+        mode: '0644'
+      notify: Update apt cache
+
+    - name: Upgrade complet du système
+      apt:
+        upgrade: full
+
+    - name: Installer le kernel Proxmox
+      apt:
+        name: proxmox-default-kernel
+        state: present
+      notify: Maybe reboot server
+
+  handlers:
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Maybe reboot server
+      when: reboot_enabled | bool
+      reboot:
+        msg: "Reboot requis après installation du kernel Proxmox"
+        reboot_timeout: 600
+
+
