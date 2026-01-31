@@ -148,3 +148,65 @@ proxmox_cluster:
     - ansible-playbook playbooks/06-replication.yml
   only:
     - main
+
+
+# ======================
+# ZFS
+# ======================
+zfs_pool: tank
+zfs_disks:
+  - /dev/sdb
+  - /dev/sdc
+
+zfs_storage_id: zfs-tank
+zfs_mountpoint: /tank
+
+# ======================
+# Replication
+# ======================
+replication:
+  vmid: 100
+  target_node: proxmox2
+  schedule: "*/15"
+  rate_limit: 0
+
+
+- name: Déclarer stockage ZFS dans Proxmox
+  hosts: proxmox_master
+  become: true
+
+  tasks:
+    - name: Vérifier que la pool ZFS existe
+      command: zpool list {{ zfs_pool }}
+      register: zfs_pool_check
+      failed_when: false
+      changed_when: false
+
+    - name: Créer la pool ZFS
+      command: >
+        zpool create {{ zfs_pool }}
+        {{ zfs_disks | join(' ') }}
+      when: zfs_pool_check.rc != 0
+
+    - name: Ajouter le stockage ZFS à Proxmox
+      command: >
+        pvesm add zfspool {{ zfs_storage_id }}
+        --pool {{ zfs_pool }}
+      args:
+        creates: /etc/pve/storage.cfg
+
+
+- name: Créer réplication ZFS
+  hosts: proxmox_master
+  become: true
+
+  tasks:
+    - name: Créer job de réplication
+      command: >
+        pvesr create {{ replication.vmid }}
+        {{ replication.target_node }}
+        --schedule {{ replication.schedule }}
+        --rate {{ replication.rate_limit }}
+      register: replication_job
+      failed_when: false
+
