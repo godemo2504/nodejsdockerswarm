@@ -273,3 +273,54 @@ Yaml
       command: pvecm qdevice setup 10.0.0.10
       args:
         creates: /etc/corosync/qdevice/net.conf
+
+playbooks/proxmox-qdevice.yml (COMPLET)
+Copier le code
+Yaml
+---
+- name: Installer et démarrer QDevice (qnetd)
+  hosts: qdevice
+  become: true
+  tasks:
+    - name: Installer corosync-qnetd
+      apt:
+        name: corosync-qnetd
+        state: present
+        update_cache: yes
+
+    - name: Activer et démarrer qnetd
+      systemd:
+        name: corosync-qnetd
+        enabled: yes
+        state: started
+
+- name: Ajouter le QDevice au cluster Proxmox
+  hosts: proxmox_master
+  become: true
+  tasks:
+    - name: Vérifier si QDevice est déjà présent
+      command: pvecm status
+      register: pvecm_status
+      changed_when: false
+
+    - name: Ajouter le QDevice au cluster
+      command: pvecm qdevice setup 10.0.0.10
+      when: "'QDevice' not in pvecm_status.stdout"
+✅ Idempotent
+✅ Aucun blocage
+✅ Pas de relance inutile
+📄 .gitlab-ci.yml (FINAL)
+Copier le code
+Yaml
+stages:
+  - proxmox
+
+add_qdevice:
+  stage: proxmox
+  tags:
+    - rocky
+  script:
+    - cd ansible
+    - ansible-playbook -i inventory/hosts.ini playbooks/proxmox-qdevice.yml
+  when: manual
+  allow_failure: false
