@@ -115,3 +115,20 @@ pre_tasks:
         --rate {{ replication.rate_limit | default(1) }}
       when: >
         'replica-vm' ~ replication.vmid not in replication_list.stdout
+
+
+- name: Créer job de réplication ZFS
+  command:
+    argv:
+      - pvesr
+      - create-local-job
+      - "replica-vm{{ replication.vmid }}"
+      - "{{ replication.vmid }}"
+      - "{{ replication.target_node }}"
+      - --schedule
+      - "{{ replication.schedule }}"
+      - --rate
+      - "{{ replication.rate_limit | default(1) }}"
+  when: >
+    'replica-vm' ~ replication.vmid not in replication_list.stdout
+
