@@ -1,34 +1,18 @@
 ---
-- name: Créer réplication ZFS
+- name: Créer réplication ZFS (mode shell hardcodé)
   hosts: proxmox_master
   become: true
 
-  vars_files:
-    - ../group_vars/proxmox.yml
-
-  pre_tasks:
-    - name: Vérifier que la variable replication est définie
-      assert:
-        that:
-          - replication is defined
-          - replication.vmid is defined
-          - replication.target_node is defined
-          - replication.schedule is defined
-        fail_msg: "Variable replication manquante ou incomplète dans group_vars/proxmox.yml"
-
   tasks:
-    - name: Vérifier si la réplication existe déjà
+    - name: Vérifier si une réplication existe déjà
       ansible.builtin.command: pvesr list
       register: replication_list
       changed_when: false
 
-    - name: Créer job de réplication ZFS
-      ansible.builtin.command:
-        cmd: >
-          pvesr create-local-job
-          replica-vm{{ replication.vmid }}
-          {{ replication.target_node }}
-          --schedule {{ replication.schedule }}
-          --rate {{ replication.rate_limit | default(1) }}
-      when: "'replica-vm' ~ replication.vmid not in replication_list.stdout"
+    - name: Créer job de réplication ZFS (shell direct)
+      ansible.builtin.shell: |
+        pvesr create-local-job replica-vm100 proxmox2 --schedule */5 --rate 1
+      args:
+        executable: /bin/bash
+      when: "'replica-vm100' not in replication_list.stdout"
       changed_when: true
