@@ -81,3 +81,37 @@ pre_tasks:
         --rate {{ replication.rate_limit | default(0) }}
       when: >
         replication.vmid | string not in replication_status.stdout
+
+
+
+---
+- name: Créer réplication ZFS
+  hosts: proxmox_master
+  become: true
+
+  pre_tasks:
+    - name: Vérifier que la variable replication est définie
+      assert:
+        that:
+          - replication is defined
+          - replication.vmid is defined
+          - replication.target_node is defined
+          - replication.schedule is defined
+        fail_msg: "Variable replication manquante dans group_vars/proxmox.yml"
+
+  tasks:
+    - name: Vérifier si la réplication existe déjà
+      command: pvesr list
+      register: replication_list
+      changed_when: false
+
+    - name: Créer job de réplication ZFS
+      command: >
+        pvesr create-local-job
+        replica-vm{{ replication.vmid }}
+        {{ replication.vmid }}
+        {{ replication.target_node }}
+        --schedule {{ replication.schedule }}
+        --rate {{ replication.rate_limit | default(1) }}
+      when: >
+        'replica-vm' ~ replication.vmid not in replication_list.stdout
