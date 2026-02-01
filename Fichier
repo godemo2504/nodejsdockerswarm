@@ -1,0 +1,118 @@
+versions.tf
+Copier le code
+Hcl
+terraform {
+  required_version = ">= 1.3.0"
+
+  required_providers {
+    proxmox = {
+      source  = "Telmate/proxmox"
+      version = "~> 2.9.14"
+    }
+  }
+}
+📄 backend.tf
+👉 Backend local (compatible GitLab CI).
+Tu pourras le passer en backend GitLab plus tard sans rien casser.
+Copier le code
+Hcl
+terraform {
+  backend "local" {
+    path = "terraform.tfstate"
+  }
+}
+📄 provider.tf
+Copier le code
+Hcl
+provider "proxmox" {
+  pm_api_url          = var.pm_api_url
+  pm_api_token_id     = var.pm_api_token_id
+  pm_api_token_secret = var.pm_api_token_secret
+  pm_tls_insecure     = true
+}
+📄 variables.tf
+Copier le code
+Hcl
+variable "pm_api_url" {
+  description = "URL de l'API Proxmox"
+  type        = string
+}
+
+variable "pm_api_token_id" {
+  description = "Token ID Proxmox (ex: terraform@pve!gitlab)"
+  type        = string
+  sensitive   = true
+}
+
+variable "pm_api_token_secret" {
+  description = "Secret du token Proxmox"
+  type        = string
+  sensitive   = true
+}
+
+variable "target_node" {
+  description = "Noeud Proxmox cible"
+  type        = string
+  default     = "proxmox2"
+}
+
+variable "bridge" {
+  description = "Bridge réseau"
+  type        = string
+  default     = "vmbr0"
+}
+
+variable "gateway" {
+  description = "Passerelle réseau"
+  type        = string
+  default     = "10.0.0.1"
+}
+
+variable "ssh_public_key_path" {
+  description = "Chemin vers la clé SSH publique"
+  type        = string
+  default     = "~/.ssh/id_rsa.pub"
+}
+📄 main.tf (🔥 VERSION FINALE STABLE 🔥)
+Copier le code
+Hcl
+resource "proxmox_vm_qemu" "debian" {
+  count = 2
+
+  name        = "debian-vm-${count.index + 1}"
+  target_node = var.target_node
+  vmid        = 101 + count.index
+
+  clone      = "debian12-cloudinit"
+  full_clone = true
+
+  os_type = "cloud-init"
+
+  cores   = 1
+  sockets = 1
+  memory  = 2048
+  cpu     = "host"
+
+  scsihw = "virtio-scsi-pci"
+
+  disk {
+    size    = "20G"
+    type    = "scsi"
+    storage = "local"
+  }
+
+  network {
+    model  = "virtio"
+    bridge = var.bridge
+  }
+
+  ipconfig0 = "ip=10.0.0.${21 + count.index}/24,gw=${var.gateway}"
+
+  sshkeys = file(var.ssh_public_key_path)
+
+  onboot = true
+
+  lifecycle {
+    ignore_changes = all
+  }
+}
