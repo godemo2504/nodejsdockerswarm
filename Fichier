@@ -116,3 +116,59 @@ resource "proxmox_vm_qemu" "debian" {
     ignore_changes = all
   }
 }
+
+
+
+
+resource "proxmox_vm_qemu" "debian" {
+  count = 2
+
+  name        = "debian-vm-${count.index + 1}"
+  target_node = var.target_node
+  vmid        = 101 + count.index
+
+  clone      = "debian12-cloudinit"
+  full_clone = true
+
+  os_type = "cloud-init"
+
+  cores   = 1
+  sockets = 1
+  memory  = 2048
+  cpu     = "host"
+
+  scsihw = "virtio-scsi-pci"
+
+  disk {
+    size    = "20G"
+    storage = "local"
+    type    = "scsi"
+  }
+
+  network {
+    model  = "virtio"
+    bridge = var.bridge
+  }
+
+  ipconfig0 = "ip=10.0.0.${21 + count.index}/24,gw=${var.gateway}"
+
+  sshkeys = file(var.ssh_public_key_path)
+
+  onboot = true
+
+  ### 🔒 CONTOURNEMENT BUG TELMATE
+  lifecycle {
+    ignore_changes = [
+      network,
+      disk,
+      ipconfig0,
+      sshkeys,
+      memory,
+      cores,
+      sockets,
+      cpu,
+      scsihw,
+      onboot
+    ]
+  }
+}
