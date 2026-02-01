@@ -1,26 +1,5 @@
 ---
-- name: Créer réplication ZFS (mode shell hardcodé)
-  hosts: proxmox_master
-  become: true
-
-  tasks:
-    - name: Vérifier si une réplication existe déjà
-      ansible.builtin.command: pvesr list
-      register: replication_list
-      changed_when: false
-
-    - name: Créer job de réplication ZFS (shell direct)
-      ansible.builtin.shell: |
-        pvesr create-local-job replica-vm100 proxmox2 --schedule */5 --rate 1
-      args:
-        executable: /bin/bash
-      when: "'replica-vm100' not in replication_list.stdout"
-      changed_when: true
-
-
-
----
-- name: Créer réplication ZFS (avec variables)
+- name: Créer réplication ZFS Proxmox (protégée)
   hosts: proxmox_master
   become: true
 
@@ -28,28 +7,49 @@
     - ../group_vars/proxmox.yml
 
   pre_tasks:
-    - name: Vérifier que les variables de réplication sont définies
+    - name: Vérifier que la variable replication est définie
       ansible.builtin.assert:
         that:
           - replication is defined
           - replication.vmid is defined
           - replication.target_node is defined
           - replication.schedule is defined
-          - replication.rate_limit is defined
-        fail_msg: "Variables de réplication manquantes ou incomplètes dans group_vars/proxmox.yml"
+        fail_msg: "Variable replication manquante ou incomplète dans group_vars/proxmox.yml"
 
   tasks:
+    # ---------------------------------------------------
+    # Vérifier que la VM existe
+    # ---------------------------------------------------
+    - name: Vérifier que la VM {{ replication.vmid }} existe
+      ansible.builtin.command: qm status {{ replication.vmid }}
+      register: vm_check
+      failed_when: false
+      changed_when: false
+
+    - name: Afficher message si la VM n'existe pas
+      ansible.builtin.debug:
+        msg: "La VM {{ replication.vmid }} n'existe pas encore, réplication ignorée"
+      when: vm_check.rc != 0
+
+    # ---------------------------------------------------
+    # Vérifier si une réplication existe déjà
+    # ---------------------------------------------------
     - name: Lister les jobs de réplication existants
       ansible.builtin.command: pvesr list
       register: replication_list
       changed_when: false
+      when: vm_check.rc == 0
 
-    - name: Créer le job de réplication ZFS
-      ansible.builtin.shell: |
-        pvesr create-local-job {{ replication.vmid }} {{ replication.target_node }} \
-        --schedule "{{ replication.schedule }}" \
-        --rate {{ replication.rate_limit }}
-      args:
-        executable: /bin/bash
-      when: replication.vmid|string not in replication_list.stdout
-      changed_when: true
+    # ---------------------------------------------------
+    # Créer la réplication ZFS
+    # ---------------------------------------------------
+    - name: Créer job de réplication ZFS
+      ansible.builtin.command: >
+        pvesr create-local-job
+        {{ replication.vmid }}
+        {{ replication.target_node }}
+        --schedule {{ replication.schedule }}
+        --rate {{ replication.rate_limit | default(1) }}
+      when:
+        - vm_check.rc == 0
+        - replication.vmid | string not in replication_list.stdout
