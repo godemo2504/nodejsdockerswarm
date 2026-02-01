@@ -172,3 +172,84 @@ resource "proxmox_vm_qemu" "debian" {
     ]
   }
 }
+
+
+
+proxmox_api_host: "172.32.39.252"
+proxmox_api_user: "ansible@pve"
+proxmox_api_token_id: "ansible-token"
+proxmox_api_token_secret: "XXXXXXX"
+
+proxmox_node: "proxmox2"
+template_vmid: 100
+storage: "local-lvm"
+bridge: "vmbr0"
+
+gateway: "172.32.39.1"
+ssh_public_key: "ssh-rsa AAAA...."
+
+vms:
+  - vmid: 101
+    name: debian-vm-1
+    ip: 172.32.39.101
+  - vmid: 102
+    name: debian-vm-2
+    ip: 172.32.39.102
+
+- name: Create Debian 12 VMs on Proxmox
+  hosts: proxmox
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+  tasks:
+    - name: Clone VM from template
+      community.general.proxmox_kvm:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_token_id: "{{ proxmox_api_token_id }}"
+        api_token_secret: "{{ proxmox_api_token_secret }}"
+        node: "{{ proxmox_node }}"
+        clone: "{{ template_vmid }}"
+        vmid: "{{ item.vmid }}"
+        name: "{{ item.name }}"
+        full: true
+        storage: "{{ storage }}"
+        timeout: 300
+      loop: "{{ vms }}"
+
+    - name: Configure VM (CPU, RAM, Network, Cloud-init)
+      community.general.proxmox_kvm:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_token_id: "{{ proxmox_api_token_id }}"
+        api_token_secret: "{{ proxmox_api_token_secret }}"
+        node: "{{ proxmox_node }}"
+        vmid: "{{ item.vmid }}"
+        cores: 2
+        memory: 2048
+        ciuser: debian
+        sshkeys: "{{ ssh_public_key }}"
+        ipconfig:
+          ipconfig0: "ip={{ item.ip }}/24,gw={{ gateway }}"
+        net:
+          net0: "virtio,bridge={{ bridge }}"
+        onboot: true
+        update: true
+      loop: "{{ vms }}"
+
+    - name: Start VM
+      community.general.proxmox_kvm:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_token_id: "{{ proxmox_api_token_id }}"
+        api_token_secret: "{{ proxmox_api_token_secret }}"
+        node: "{{ proxmox_node }}"
+        vmid: "{{ item.vmid }}"
+        state: started
+      loop: "{{ vms }}"
+
+
+ansible-galaxy collection install community.general
+ansible-playbook playbooks/create_vms.yml
+
