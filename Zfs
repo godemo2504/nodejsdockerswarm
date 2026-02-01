@@ -106,17 +106,16 @@ pre_tasks:
       changed_when: false
 
     - name: Créer job de réplication ZFS
-      command: >
-        pvesr create-local-job
-        replica-vm{{ replication.vmid }}
-        {{ replication.vmid }}
-        {{ replication.target_node }}
-        --schedule {{ replication.schedule }}
-        --rate {{ replication.rate_limit | default(1) }}
-      when: >
-        'replica-vm' ~ replication.vmid not in replication_list.stdout
-
-
+  ansible.builtin.command:
+    cmd: >
+      pvesr create-local-job
+      replica-vm{{ replication.vmid }}
+      {{ replication.vmid }}
+      {{ replication.target_node }}
+      --schedule {{ replication.schedule }}
+      --rate {{ replication.rate_limit | default(1) }}
+  when: >
+    'replica-vm' ~ replication.vmid not in replication_list.stdout
 - name: Créer job de réplication ZFS
   command:
     argv:
