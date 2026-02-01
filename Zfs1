@@ -30,5 +30,5 @@
           {{ replication.target_node }}
           --schedule {{ replication.schedule }}
           --rate {{ replication.rate_limit | default(1) }}
-      when: "'replica-vm{{ replication.vmid }}' not in replication_list.stdout"
+      when: "'replica-vm' ~ replication.vmid not in replication_list.stdout"
       changed_when: true
