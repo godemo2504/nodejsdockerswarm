@@ -1,0 +1,49 @@
+---
+- name: Créer template Debian 12 Cloud-Init
+  hosts: proxmox_master
+  become: true
+
+  vars:
+    template_id: 9000
+    template_name: debian12-cloudinit
+    iso_path: /var/lib/vz/template/iso
+    iso_name: debian-12.5.0-amd64-netinst.iso
+    storage: local-lvm
+    bridge: vmbr0
+
+  tasks:
+    - name: Vérifier si le template existe déjà
+      command: qm status {{ template_id }}
+      register: template_check
+      failed_when: false
+      changed_when: false
+
+    - name: Créer la VM Debian 12
+      command: >
+        qm create {{ template_id }}
+        --name {{ template_name }}
+        --memory 2048
+        --cores 2
+        --net0 virtio,bridge={{ bridge }}
+        --ostype l26
+      when: template_check.rc != 0
+
+    - name: Attacher le disque système
+      command: qm set {{ template_id }} --scsihw virtio-scsi-pci --scsi0 {{ storage }}:8
+      when: template_check.rc != 0
+
+    - name: Attacher l'ISO Debian
+      command: qm set {{ template_id }} --ide2 {{ iso_path }}/{{ iso_name }},media=cdrom
+      when: template_check.rc != 0
+
+    - name: Activer Cloud-Init
+      command: qm set {{ template_id }} --ide0 {{ storage }}:cloudinit
+      when: template_check.rc != 0
+
+    - name: Définir boot order
+      command: qm set {{ template_id }} --boot order=scsi0
+      when: template_check.rc != 0
+
+    - name: Convertir la VM en template
+      command: qm template {{ template_id }}
+      when: template_check.rc != 0
