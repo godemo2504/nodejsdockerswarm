@@ -6,9 +6,12 @@
   vars:
     template_id: 9000
     template_name: debian12-cloudinit
+
+    iso_storage: local
     iso_path: /var/lib/vz/template/iso
     iso_name: debian-12.5.0-amd64-netinst.iso
-    storage: local-lvm
+
+    vm_storage: zfs-rpool-vm
     bridge: vmbr0
 
   tasks:
@@ -18,7 +21,7 @@
       failed_when: false
       changed_when: false
 
-    - name: Créer la VM Debian 12
+    - name: Créer la VM
       command: >
         qm create {{ template_id }}
         --name {{ template_name }}
@@ -28,22 +31,29 @@
         --ostype l26
       when: template_check.rc != 0
 
-    - name: Attacher le disque système
-      command: qm set {{ template_id }} --scsihw virtio-scsi-pci --scsi0 {{ storage }}:8
+    - name: Créer le disque système
+      command: >
+        qm set {{ template_id }}
+        --scsihw virtio-scsi-pci
+        --scsi0 {{ vm_storage }}:8
       when: template_check.rc != 0
 
-    - name: Attacher l'ISO Debian
-      command: qm set {{ template_id }} --ide2 {{ iso_path }}/{{ iso_name }},media=cdrom
+    - name: Attacher l'ISO Debian 12
+      command: >
+        qm set {{ template_id }}
+        --ide2 {{ iso_storage }}:iso/{{ iso_name }},media=cdrom
       when: template_check.rc != 0
 
     - name: Activer Cloud-Init
-      command: qm set {{ template_id }} --ide0 {{ storage }}:cloudinit
+      command: >
+        qm set {{ template_id }}
+        --ide0 {{ vm_storage }}:cloudinit
       when: template_check.rc != 0
 
-    - name: Définir boot order
+    - name: Définir l'ordre de boot
       command: qm set {{ template_id }} --boot order=scsi0
       when: template_check.rc != 0
 
-    - name: Convertir la VM en template
+    - name: Convertir en template
       command: qm template {{ template_id }}
       when: template_check.rc != 0
