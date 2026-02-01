@@ -104,3 +104,16 @@ resource "proxmox_vm_qemu" "debian_vm" {
 
   onboot = true
 }
+
+
+
+{
+  "debian-vm-1" = {
+    vmid = 101
+    ip   = "10.0.0.21"
+  }
+  "debian-vm-2" = {
+    vmid = 102
+    ip   = "10.0.0.22"
+  }
+}
