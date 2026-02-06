@@ -1,0 +1,29 @@
+- name: Install poetry
+  pip:
+    name: poetry
+    executable: pip3
+
+- name: Clone Atmosphere
+  git:
+    repo: https://github.com/vexxhost/atmosphere.git
+    dest: "{{ atmosphere_dir }}"
+    version: main
+    force: yes
+
+- name: Disable Poetry package mode
+  lineinfile:
+    path: "{{ atmosphere_dir }}/pyproject.toml"
+    regexp: '^package-mode'
+    line: 'package-mode = false'
+    insertafter: '^\[tool.poetry\]'
+  become: true
+
+- name: Install Atmosphere dependencies
+  command: poetry install --no-root
+  args:
+    chdir: "{{ atmosphere_dir }}"
+
+- name: Deploy OpenStack AIO
+  command: poetry run molecule converge -s aio
+  args:
+    chdir: "{{ atmosphere_dir }}"
