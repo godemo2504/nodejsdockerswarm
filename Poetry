@@ -10,20 +10,20 @@
     version: main
     force: yes
 
-- name: Disable Poetry package mode
-  lineinfile:
-    path: "{{ atmosphere_dir }}/pyproject.toml"
-    regexp: '^package-mode'
-    line: 'package-mode = false'
-    insertafter: '^\[tool.poetry\]'
-  become: true
+- name: Configure Poetry for CI (disable package mode & venv)
+  shell: |
+    poetry config virtualenvs.create false
+  args:
+    chdir: "{{ atmosphere_dir }}"
 
-- name: Install Atmosphere dependencies
-  command: poetry install --no-root
+- name: Install Atmosphere dependencies (CI safe)
+  shell: |
+    POETRY_PACKAGE_MODE=0 poetry install --no-root
   args:
     chdir: "{{ atmosphere_dir }}"
 
 - name: Deploy OpenStack AIO
-  command: poetry run molecule converge -s aio
+  shell: |
+    POETRY_PACKAGE_MODE=0 poetry run molecule converge -s aio
   args:
     chdir: "{{ atmosphere_dir }}"
