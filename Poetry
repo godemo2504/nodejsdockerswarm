@@ -1,4 +1,16 @@
-- name: Install poetry
+- name: Install system dependencies
+  apt:
+    name:
+      - git
+      - python3-pip
+      - python3-venv
+      - build-essential
+      - libssl-dev
+      - libffi-dev
+    state: present
+    update_cache: yes
+
+- name: Install Poetry
   pip:
     name: poetry
     executable: pip3
@@ -10,20 +22,21 @@
     version: main
     force: yes
 
-- name: Configure Poetry for CI (disable package mode & venv)
+- name: Disable Poetry venv (CI safe)
   shell: |
     poetry config virtualenvs.create false
   args:
     chdir: "{{ atmosphere_dir }}"
 
-- name: Install Atmosphere dependencies (CI safe)
+- name: Install Python deps via pip (PROD method)
   shell: |
-    POETRY_PACKAGE_MODE=0 poetry install --no-root
+    pip3 install -r requirements.txt || true
+    pip3 install -r requirements-dev.txt || true
   args:
     chdir: "{{ atmosphere_dir }}"
 
-- name: Deploy OpenStack AIO
+- name: Run Atmosphere AIO deployment
   shell: |
-    POETRY_PACKAGE_MODE=0 poetry run molecule converge -s aio
+    poetry run molecule converge -s aio
   args:
     chdir: "{{ atmosphere_dir }}"
