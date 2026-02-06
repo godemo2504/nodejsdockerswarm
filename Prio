@@ -1,0 +1,149 @@
+1️⃣ Inventory PROD
+inventory/prod.ini
+Copier le code
+Ini
+[openstack_aio]
+aio01 ansible_host=10.0.0.10 ansible_user=root
+2️⃣ Variables PROD
+group_vars/openstack_aio.yml
+Copier le code
+Yaml
+atmosphere_dir: /opt/atmosphere
+
+min_ram_mb: 32768
+min_cpu: 8
+min_disk_gb: 100
+3️⃣ Precheck (CRITIQUE en PROD)
+roles/precheck/tasks/main.yml
+Copier le code
+Yaml
+- name: Check CPU virtualization
+  command: egrep -c '(vmx|svm)' /proc/cpuinfo
+  register: virt
+  failed_when: virt.stdout | int == 0
+
+- name: Check RAM
+  assert:
+    that: ansible_memtotal_mb >= min_ram_mb
+    fail_msg: "RAM insuffisante pour OpenStack AIO"
+
+- name: Check disk space
+  assert:
+    that: ansible_mounts | selectattr('mount','equalto','/') | map(attribute='size_total') | first > min_disk_gb * 1024**3
+playbooks/00-precheck.yml
+Copier le code
+Yaml
+- hosts: openstack_aio
+  become: true
+  roles:
+    - precheck
+4️⃣ Préparation OS (PROD SAFE)
+roles/prepare_os/tasks/main.yml
+Copier le code
+Yaml
+- name: Update apt cache only
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install required packages
+  apt:
+    name:
+      - git
+      - python3-pip
+      - python3-venv
+      - curl
+      - ca-certificates
+    state: present
+
+- name: Disable unattended upgrades
+  systemd:
+    name: unattended-upgrades
+    enabled: false
+    state: stopped
+playbooks/01-prepare-os.yml
+Copier le code
+Yaml
+- hosts: openstack_aio
+  become: true
+  roles:
+    - prepare_os
+5️⃣ Installation Atmosphere (ISOLÉE)
+roles/atmosphere/tasks/main.yml
+Copier le code
+Yaml
+- name: Install poetry
+  pip:
+    name: poetry
+    executable: pip3
+
+- name: Clone Atmosphere
+  git:
+    repo: https://github.com/vexxhost/atmosphere.git
+    dest: "{{ atmosphere_dir }}"
+    version: main
+    force: yes
+
+- name: Install Atmosphere deps
+  command: poetry install --with dev
+  args:
+    chdir: "{{ atmosphere_dir }}"
+playbooks/02-install-atmosphere.yml
+Copier le code
+Yaml
+- hosts: openstack_aio
+  become: true
+  roles:
+    - atmosphere
+6️⃣ Déploiement OpenStack AIO (PROD)
+playbooks/03-deploy-openstack.yml
+Copier le code
+Yaml
+- hosts: openstack_aio
+  become: true
+  tasks:
+    - name: Deploy OpenStack AIO
+      command: poetry run molecule converge -s aio
+      args:
+        chdir: "{{ atmosphere_dir }}"
+7️⃣ GitLab CI PROD (ROBUSTE)
+.gitlab-ci.yml
+Copier le code
+Yaml
+stages:
+  - precheck
+  - prepare
+  - install
+  - deploy
+
+variables:
+  ANSIBLE_FORCE_COLOR: "true"
+
+.prep:
+  tags: [shell]
+  before_script:
+    - cd ansible
+
+precheck:
+  stage: precheck
+  extends: .prep
+  script:
+    - ansible-playbook -i inventory/prod.ini playbooks/00-precheck.yml
+
+prepare_os:
+  stage: prepare
+  extends: .prep
+  script:
+    - ansible-playbook -i inventory/prod.ini playbooks/01-prepare-os.yml
+
+install_atmosphere:
+  stage: install
+  extends: .prep
+  script:
+    - ansible-playbook -i inventory/prod.ini playbooks/02-install-atmosphere.yml
+
+deploy_openstack:
+  stage: deploy
+  extends: .prep
+  script:
+    - ansible-playbook -i inventory/prod.ini playbooks/03-deploy-openstack.yml
