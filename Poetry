@@ -1,42 +1,80 @@
-- name: Install system dependencies
-  apt:
-    name:
-      - git
-      - python3-pip
-      - python3-venv
-      - build-essential
-      - libssl-dev
-      - libffi-dev
-    state: present
-    update_cache: yes
+✅ Étape 1 — Préparer l’OS (OBLIGATOIRE)
+playbooks/prepare-os.yml
+Copier le code
+Yaml
+- hosts: openstack_aio
+  become: true
+  tasks:
+    - name: Update system
+      apt:
+        update_cache: yes
+        upgrade: dist
 
+    - name: Install base packages
+      apt:
+        name:
+          - git
+          - curl
+          - wget
+          - bridge-utils
+          - libvirt-daemon-system
+          - libvirt-clients
+          - qemu-kvm
+          - python3-pip
+          - python3-venv
+          - build-essential
+          - pkg-config
+          - libssl-dev
+        state: present
+
+    - name: Enable libvirtd
+      systemd:
+        name: libvirtd
+        enabled: true
+        state: started
+✅ Étape 2 — Installer Poetry PROPREMENT
+❌ PAS via pip
+Copier le code
+Yaml
 - name: Install Poetry
-  pip:
-    name: poetry
-    executable: pip3
+  shell: |
+    curl -sSL https://install.python-poetry.org | python3 -
+  args:
+    creates: /root/.local/bin/poetry
 
+- name: Add Poetry to PATH
+  lineinfile:
+    path: /root/.bashrc
+    line: 'export PATH="$HOME/.local/bin:$PATH"'
+✅ Étape 3 — Installer Atmosphere
+Copier le code
+Yaml
 - name: Clone Atmosphere
   git:
     repo: https://github.com/vexxhost/atmosphere.git
-    dest: "{{ atmosphere_dir }}"
+    dest: /opt/atmosphere
     version: main
-    force: yes
 
-- name: Disable Poetry venv (CI safe)
-  shell: |
-    poetry config virtualenvs.create false
+- name: Install Atmosphere dependencies
+  command: poetry install --with dev
   args:
-    chdir: "{{ atmosphere_dir }}"
-
-- name: Install Python deps via pip (PROD method)
-  shell: |
-    pip3 install -r requirements.txt || true
-    pip3 install -r requirements-dev.txt || true
+    chdir: /opt/atmosphere
+✅ Étape 4 — Déployer OpenStack AIO (SEULEMENT ICI)
+Copier le code
+Yaml
+- name: Deploy OpenStack AIO
+  command: poetry run molecule converge -s aio
   args:
-    chdir: "{{ atmosphere_dir }}"
-
-- name: Run Atmosphere AIO deployment
-  shell: |
-    poetry run molecule converge -s aio
-  args:
-    chdir: "{{ atmosphere_dir }}"
+    chdir: /opt/atmosphere
+  async: 7200
+  poll: 30
+⏱️ Ça peut prendre 30–60 minutes, c’est NORMAL.
+✅ GitLab CI (corrigé)
+Copier le code
+Yaml
+deploy-openstack:
+  stage: deploy
+  script:
+    - ansible-playbook -i inventory/prod.ini playbooks/prepare-os.yml
+    - ansible-playbook -i inventory/prod.ini playbooks/install-atmosphere.yml
+    - ansible-playbook -i inventory/prod.ini playbooks/deploy-openstack.yml
