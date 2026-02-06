@@ -1,0 +1,87 @@
+🎭 Role Ansible : Atmosphere
+vars/main.yml
+Copier le code
+Yaml
+atmosphere_repo: https://github.com/vexxhost/atmosphere.git
+atmosphere_dir: /opt/atmosphere
+tasks/main.yml
+Copier le code
+Yaml
+- name: Update system
+  apt:
+    update_cache: yes
+    upgrade: dist
+  become: true
+
+- name: Install required packages
+  apt:
+    name:
+      - git
+      - python3-pip
+      - python3-venv
+      - build-essential
+      - libssl-dev
+      - libffi-dev
+    state: present
+  become: true
+
+- name: Install poetry
+  pip:
+    name: poetry
+    executable: pip3
+  become: true
+
+- name: Clone Atmosphere repository
+  git:
+    repo: "{{ atmosphere_repo }}"
+    dest: "{{ atmosphere_dir }}"
+    version: main
+    force: yes
+  become: true
+
+- name: Install Atmosphere dependencies with poetry
+  command: poetry install --with dev
+  args:
+    chdir: "{{ atmosphere_dir }}"
+  become: true
+
+- name: Deploy OpenStack AIO with Molecule
+  command: poetry run molecule converge -s aio
+  args:
+    chdir: "{{ atmosphere_dir }}"
+  become: true
+▶️ Playbook principal
+Copier le code
+Yaml
+# ansible/playbooks/deploy-atmosphere.yml
+- name: Deploy OpenStack AIO with Atmosphere
+  hosts: openstack-aio
+  become: true
+  roles:
+    - atmosphere
+🚀 GitLab CI Pipeline
+Copier le code
+Yaml
+stages:
+  - deploy
+
+variables:
+  ANSIBLE_HOST_KEY_CHECKING: "False"
+
+deploy_openstack:
+  stage: deploy
+  image: ubuntu:22.04
+  before_script:
+    - apt-get update
+    - apt-get install -y openssh-client python3 python3-pip git
+    - pip3 install ansible
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H 10.0.0.10 >> ~/.ssh/known_hosts
+  script:
+    - cd ansible
+    - ansible-playbook playbooks/deploy-atmosphere.yml -vv
+  only:
+    - main
