@@ -1,5 +1,10 @@
-✅ Étape 1 — Préparer l’OS (OBLIGATOIRE)
-playbooks/prepare-os.yml
+group_vars/openstack_aio.yml
+Copier le code
+Yaml
+atmosphere_repo: https://github.com/vexxhost/atmosphere.git
+atmosphere_dir: /opt/atmosphere
+🛠️ playbook 1 — prepare-os.yml
+(OBLIGATOIRE – 90 % des erreurs viennent d’ici)
 Copier le code
 Yaml
 - hosts: openstack_aio
@@ -17,64 +22,99 @@ Yaml
           - curl
           - wget
           - bridge-utils
-          - libvirt-daemon-system
-          - libvirt-clients
-          - qemu-kvm
           - python3-pip
           - python3-venv
           - build-essential
           - pkg-config
           - libssl-dev
+          - qemu-kvm
+          - libvirt-daemon-system
+          - libvirt-clients
         state: present
 
-    - name: Enable libvirtd
+    - name: Enable and start libvirtd
       systemd:
         name: libvirtd
         enabled: true
         state: started
-✅ Étape 2 — Installer Poetry PROPREMENT
-❌ PAS via pip
-Copier le code
-Yaml
-- name: Install Poetry
-  shell: |
-    curl -sSL https://install.python-poetry.org | python3 -
-  args:
-    creates: /root/.local/bin/poetry
 
-- name: Add Poetry to PATH
-  lineinfile:
-    path: /root/.bashrc
-    line: 'export PATH="$HOME/.local/bin:$PATH"'
-✅ Étape 3 — Installer Atmosphere
-Copier le code
-Yaml
-- name: Clone Atmosphere
-  git:
-    repo: https://github.com/vexxhost/atmosphere.git
-    dest: /opt/atmosphere
-    version: main
+    - name: Ensure br_netfilter is loaded
+      modprobe:
+        name: br_netfilter
+        state: present
 
-- name: Install Atmosphere dependencies
-  command: poetry install --with dev
-  args:
-    chdir: /opt/atmosphere
-✅ Étape 4 — Déployer OpenStack AIO (SEULEMENT ICI)
+    - name: Sysctl settings for OpenStack
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        sysctl_set: yes
+      loop:
+        - { key: net.ipv4.ip_forward, value: 1 }
+        - { key: net.bridge.bridge-nf-call-iptables, value: 1 }
+        - { key: net.bridge.bridge-nf-call-ip6tables, value: 1 }
+📦 playbook 2 — install-poetry.yml
+⚠️ PAS via pip
 Copier le code
 Yaml
-- name: Deploy OpenStack AIO
-  command: poetry run molecule converge -s aio
-  args:
-    chdir: /opt/atmosphere
-  async: 7200
-  poll: 30
-⏱️ Ça peut prendre 30–60 minutes, c’est NORMAL.
-✅ GitLab CI (corrigé)
+- hosts: openstack_aio
+  become: true
+  tasks:
+    - name: Install Poetry
+      shell: |
+        curl -sSL https://install.python-poetry.org | python3 -
+      args:
+        creates: /root/.local/bin/poetry
+
+    - name: Add Poetry to PATH
+      lineinfile:
+        path: /root/.bashrc
+        line: 'export PATH="$HOME/.local/bin:$PATH"'
+📥 playbook 3 — install-atmosphere.yml
 Copier le code
 Yaml
+- hosts: openstack_aio
+  become: true
+  vars_files:
+    - ../group_vars/openstack_aio.yml
+  tasks:
+    - name: Clone Atmosphere
+      git:
+        repo: "{{ atmosphere_repo }}"
+        dest: "{{ atmosphere_dir }}"
+        version: main
+
+    - name: Install Atmosphere dependencies
+      command: /root/.local/bin/poetry install --with dev
+      args:
+        chdir: "{{ atmosphere_dir }}"
+🚀 playbook 4 — deploy-openstack-aio.yml
+⏱️ 30 à 60 minutes – NORMAL
+Copier le code
+Yaml
+- hosts: openstack_aio
+  become: true
+  vars_files:
+    - ../group_vars/openstack_aio.yml
+  tasks:
+    - name: Deploy OpenStack AIO
+      command: /root/.local/bin/poetry run molecule converge -s aio
+      args:
+        chdir: "{{ atmosphere_dir }}"
+      async: 7200
+      poll: 30
+🤖 .gitlab-ci.yml (FINAL)
+Copier le code
+Yaml
+stages:
+  - deploy
+
 deploy-openstack:
   stage: deploy
+  tags:
+    - shell
   script:
-    - ansible-playbook -i inventory/prod.ini playbooks/prepare-os.yml
-    - ansible-playbook -i inventory/prod.ini playbooks/install-atmosphere.yml
-    - ansible-playbook -i inventory/prod.ini playbooks/deploy-openstack.yml
+    - cd ansible
+    - ansible-playbook playbooks/prepare-os.yml
+    - ansible-playbook playbooks/install-poetry.yml
+    - ansible-playbook playbooks/install-atmosphere.yml
+    - ansible-playbook playbooks/deploy-openstack-aio.yml
