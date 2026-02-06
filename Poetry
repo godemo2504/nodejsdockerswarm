@@ -118,3 +118,14 @@ deploy-openstack:
     - ansible-playbook playbooks/install-poetry.yml
     - ansible-playbook playbooks/install-atmosphere.yml
     - ansible-playbook playbooks/deploy-openstack-aio.yml
+
+
+
+- name: Remove broken Poetry version
+      pip:
+        name: poetry
+        state: absent
+
+    - name: Install Poetry 1.6.1 (compatible)
+      pip:
+        name: poetry==1.6.1
