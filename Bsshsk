@@ -1,0 +1,67 @@
+---
+- name: Installation de Proxmox VE sur Debian 12 Bookworm
+  hosts: proxmox
+  become: true
+
+  vars:
+    proxmox_repo: "deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription"
+    proxmox_keyring: "/usr/share/keyrings/proxmox-archive-keyring.gpg"
+    reboot_enabled: false
+
+  tasks:
+
+    - name: Disable IPv6
+      sysctl:
+        name: net.ipv6.conf.all.disable_ipv6
+        value: '1'
+        state: present
+        reload: yes
+
+    - name: Installer prérequis
+      apt:
+        name:
+          - wget
+          - gnupg
+          - ca-certificates
+        state: present
+        update_cache: yes
+
+    ############################################################
+    # 🔥 Méthode officielle recommandée Proxmox
+    ############################################################
+    - name: Télécharger clé Proxmox (méthode robuste)
+      shell: |
+        wget -qO - http://download.proxmox.com/debian/proxmox-release-bookworm.gpg \
+        | gpg --dearmor -o {{ proxmox_keyring }}
+      args:
+        creates: "{{ proxmox_keyring }}"
+
+    - name: Ajouter dépôt Proxmox no-subscription
+      copy:
+        dest: /etc/apt/sources.list.d/pve-install-repo.list
+        content: "deb [signed-by={{ proxmox_keyring }}] http://download.proxmox.com/debian/pve bookworm pve-no-subscription\n"
+
+    - name: Supprimer dépôt enterprise
+      file:
+        path: /etc/apt/sources.list.d/pve-enterprise.list
+        state: absent
+
+    - name: Update APT
+      apt:
+        update_cache: yes
+
+    - name: Upgrade système
+      apt:
+        upgrade: dist
+
+    - name: Installer Proxmox VE
+      apt:
+        name: proxmox-ve
+        state: present
+      notify: Maybe reboot server
+
+  handlers:
+    - name: Maybe reboot server
+      when: reboot_enabled | bool
+      reboot:
+        reboot_timeout: 600
