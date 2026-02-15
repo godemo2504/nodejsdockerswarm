@@ -19,3 +19,50 @@ configure:
     # Exécuter playbook
     - ansible-playbook ansible/install_nginx.yml -i inventory.ini
   when: manual
+
+
+Arborescence Ansible (finale propre)
+Text
+Copier le code
+ansible/
+│
+├── ansible.cfg
+├── install_nginx.yml
+│
+└── roles/
+    └── nginx/
+        └── tasks/
+            └── main.yml
+⚠️ On ne met PAS d’inventory statique dans le repo.
+Il sera généré dynamiquement dans le pipeline.
+📄 ansible/ansible.cfg
+Ini
+Copier le code
+[defaults]
+host_key_checking = False
+retry_files_enabled = False
+timeout = 30
+
+[ssh_connection]
+ssh_args = -o ForwardAgent=yes -o StrictHostKeyChecking=no
+📄 ansible/install_nginx.yml
+Yaml
+Copier le code
+- hosts: webservers
+  become: yes
+  roles:
+    - nginx
+📄 ansible/roles/nginx/tasks/main.yml
+Yaml
+Copier le code
+- name: Install nginx
+  apt:
+    name: nginx
+    state: present
+    update_cache: yes
+
+- name: Ensure nginx is running
+  service:
+    name: nginx
+    state: started
+    enabled: yes
