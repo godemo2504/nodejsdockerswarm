@@ -1,25 +1,22 @@
 configure:
   stage: configure
   script:
-    # SSH Agent
     - eval "$(ssh-agent -s)"
     - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
 
-    # Préparer inventory
     - echo "[webservers]" > inventory.ini
 
-    # Transformer CSV en lignes
-    - echo $VM_PRIVATE_IPS | tr ',' '\n' >> inventory.ini
+    - IFS=',' read -ra IPS <<< "$VM_PRIVATE_IPS"
+    - for ip in "${IPS[@]}"; do echo "$ip" >> inventory.ini; done
 
     - echo "" >> inventory.ini
     - echo "[webservers:vars]" >> inventory.ini
     - echo "ansible_user=debian" >> inventory.ini
     - echo "ansible_ssh_common_args='-o ProxyJump=root@$BASTION_IP'" >> inventory.ini
 
-    # Exécuter playbook
-    - ansible-playbook ansible/install_nginx.yml -i inventory.ini
-  when: manual
+    - cat inventory.ini   # DEBUG IMPORTANT
 
+    - ansible-playbook ansible/install_nginx.yml -i inventory.ini -vv
 
 Arborescence Ansible (finale propre)
 Text
