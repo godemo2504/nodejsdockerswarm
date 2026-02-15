@@ -1,0 +1,114 @@
+---
+- name: Installation de Proxmox VE sur Debian 12 Bookworm
+  hosts: proxmox
+  become: true
+
+  vars:
+    proxmox_repo: "deb [signed-by=/usr/share/keyrings/proxmox-archive-keyring.gpg] http://download.proxmox.com/debian/pve bookworm pve-no-subscription"
+    proxmox_keyring: "/usr/share/keyrings/proxmox-archive-keyring.gpg"
+    reboot_enabled: true
+
+  tasks:
+
+  ######################################################################
+  # Désactiver IPv6 (optionnel mais recommandé dans ton infra OpenStack)
+  ######################################################################
+
+  - name: Disable IPv6
+    sysctl:
+      name: net.ipv6.conf.all.disable_ipv6
+      value: '1'
+      state: present
+      reload: yes
+
+  ######################################################################
+  # Supprimer toute référence au dépôt enterprise
+  ######################################################################
+
+  - name: Remove enterprise repo file if exists
+    file:
+      path: /etc/apt/sources.list.d/pve-enterprise.list
+      state: absent
+    ignore_errors: yes
+
+  - name: Remove any enterprise repo entries in sources.list
+    replace:
+      path: /etc/apt/sources.list
+      regexp: '^deb .*enterprise\.proxmox\.com.*'
+      replace: '# \g<0>'
+    ignore_errors: yes
+
+  - name: Remove any enterprise repo leftover files
+    shell: rm -f /etc/apt/sources.list.d/*enterprise*.list
+    ignore_errors: yes
+
+  ######################################################################
+  # Installer prérequis
+  ######################################################################
+
+  - name: Install required packages
+    apt:
+      name:
+        - wget
+        - gnupg
+        - ca-certificates
+      state: present
+      update_cache: yes
+
+  ######################################################################
+  # Télécharger clé officielle Proxmox (méthode robuste)
+  ######################################################################
+
+  - name: Download Proxmox GPG key
+    shell: |
+      wget -qO - http://download.proxmox.com/debian/proxmox-release-bookworm.gpg \
+      | gpg --dearmor -o {{ proxmox_keyring }}
+    args:
+      creates: "{{ proxmox_keyring }}"
+
+  ######################################################################
+  # Ajouter dépôt no-subscription
+  ######################################################################
+
+  - name: Add Proxmox no-subscription repository
+    copy:
+      dest: /etc/apt/sources.list.d/pve-install-repo.list
+      content: "{{ proxmox_repo }}"
+
+  ######################################################################
+  # Update & Upgrade
+  ######################################################################
+
+  - name: Update APT cache
+    apt:
+      update_cache: yes
+
+  - name: Full upgrade system
+    apt:
+      upgrade: dist
+
+  ######################################################################
+  # Installer Proxmox VE
+  ######################################################################
+
+  - name: Install Proxmox VE
+    apt:
+      name: proxmox-ve
+      state: present
+    notify: Reboot server
+
+  ######################################################################
+  # Nettoyage optionnel (supprimer kernel Debian)
+  ######################################################################
+
+  - name: Remove Debian kernel if present
+    apt:
+      name: linux-image-amd64
+      state: absent
+    ignore_errors: yes
+
+  handlers:
+    - name: Reboot server
+      when: reboot_enabled | bool
+      reboot:
+        reboot_timeout: 600
