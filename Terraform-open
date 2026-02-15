@@ -1,0 +1,200 @@
+Objectif maintenant :
+✅ Créer image Debian 12
+✅ Créer network + subnet + router
+✅ Créer keypair
+✅ Créer 2 VM m1.large
+✅ Assigner Floating IP
+❌ Pas d’Ansible pour le moment
+📁 Arborescence minimale propre
+Text
+Copier le code
+openstack-vm-terraform/
+│
+├── .gitlab-ci.yml
+├── backend.tf
+├── providers.tf
+├── variables.tf
+├── terraform.tfvars
+│
+├── image.tf
+├── network.tf
+├── security.tf
+├── compute.tf
+├── floating_ip.tf
+├── outputs.tf
+│
+└── terraform_key.pub
+📄 Contenu des fichiers
+🔹 backend.tf (optionnel mais recommandé)
+Hcl
+Copier le code
+terraform {
+  backend "swift" {
+    container = "terraform-state"
+  }
+}
+Si tu ne veux pas encore backend distant → supprime ce fichier.
+🔹 providers.tf
+Hcl
+Copier le code
+terraform {
+  required_providers {
+    openstack = {
+      source  = "terraform-provider-openstack/openstack"
+      version = "~> 1.54"
+    }
+  }
+}
+
+provider "openstack" {}
+Les variables OS_* doivent être définies dans GitLab CI.
+🔹 variables.tf
+Hcl
+Copier le code
+variable "vm_count" {
+  default = 2
+}
+
+variable "flavor_name" {
+  default = "m1.large"
+}
+🔹 terraform.tfvars
+Hcl
+Copier le code
+vm_count    = 2
+flavor_name = "m1.large"
+🔹 image.tf
+Hcl
+Copier le code
+resource "openstack_images_image_v2" "debian12" {
+  name             = "debian-12-terraform"
+  image_source_url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2"
+  container_format = "bare"
+  disk_format      = "qcow2"
+  visibility       = "private"
+}
+🔹 network.tf
+Hcl
+Copier le code
+data "openstack_networking_network_v2" "public" {
+  name = "public"
+}
+
+resource "openstack_networking_network_v2" "net" {
+  name           = "tf-net"
+  admin_state_up = true
+}
+
+resource "openstack_networking_subnet_v2" "subnet" {
+  name       = "tf-subnet"
+  network_id = openstack_networking_network_v2.net.id
+  cidr       = "192.168.100.0/24"
+  ip_version = 4
+}
+
+resource "openstack_networking_router_v2" "router" {
+  name                = "tf-router"
+  external_network_id = data.openstack_networking_network_v2.public.id
+}
+
+resource "openstack_networking_router_interface_v2" "router_interface" {
+  router_id = openstack_networking_router_v2.router.id
+  subnet_id = openstack_networking_subnet_v2.subnet.id
+}
+🔹 security.tf
+Hcl
+Copier le code
+resource "openstack_networking_secgroup_v2" "ssh" {
+  name = "tf-secgroup"
+}
+
+resource "openstack_networking_secgroup_rule_v2" "ssh_rule" {
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  protocol          = "tcp"
+  port_range_min    = 22
+  port_range_max    = 22
+  security_group_id = openstack_networking_secgroup_v2.ssh.id
+}
+🔹 compute.tf
+⚠ Génère une clé si pas encore fait :
+Bash
+Copier le code
+ssh-keygen -t rsa -b 4096 -f terraform_key
+Puis :
+Hcl
+Copier le code
+resource "openstack_compute_keypair_v2" "key" {
+  name       = "tf-keypair"
+  public_key = file("terraform_key.pub")
+}
+
+resource "openstack_compute_instance_v2" "vm" {
+  count       = var.vm_count
+  name        = "debian12-vm-${count.index + 1}"
+  image_id    = openstack_images_image_v2.debian12.id
+  flavor_name = var.flavor_name
+  key_pair    = openstack_compute_keypair_v2.key.name
+
+  security_groups = [
+    openstack_networking_secgroup_v2.ssh.name
+  ]
+
+  network {
+    uuid = openstack_networking_network_v2.net.id
+  }
+}
+🔹 floating_ip.tf
+Hcl
+Copier le code
+resource "openstack_networking_floatingip_v2" "fip" {
+  count = var.vm_count
+  pool  = "public"
+}
+
+resource "openstack_compute_floatingip_associate_v2" "fip_assoc" {
+  count       = var.vm_count
+  floating_ip = openstack_networking_floatingip_v2.fip[count.index].address
+  instance_id = openstack_compute_instance_v2.vm[count.index].id
+}
+🔹 outputs.tf
+Hcl
+Copier le code
+output "floating_ips" {
+  value = openstack_networking_floatingip_v2.fip[*].address
+}
+🚀 .gitlab-ci.yml minimal
+Yaml
+Copier le code
+image: hashicorp/terraform:1.6
+
+stages:
+  - validate
+  - apply
+
+before_script:
+  - terraform init -reconfigure
+
+validate:
+  stage: validate
+  script:
+    - terraform validate
+
+apply:
+  stage: apply
+  script:
+    - terraform apply -auto-approve
+  when: manual
+🔥 Résultat attendu après Apply
+Dans OpenStack :
+✔ Image Debian 12 privée
+✔ Réseau tf-net
+✔ Router
+✔ Security group SSH
+✔ 2 VM m1.large
+✔ 2 Floating IP
+✔ SSH accessible :
+Bash
+Copier le code
+ssh -i terraform_key debian@FLOATING_IP
+🎯 Étape suivante logique
