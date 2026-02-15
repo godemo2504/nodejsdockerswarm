@@ -63,3 +63,26 @@ Copier le code
     name: nginx
     state: started
     enabled: yes
+
+
+
+
+configure:
+  stage: configure
+  script:
+    - eval "$(ssh-agent -s)"
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+
+    - mkdir -p ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\tUserKnownHostsFile=/dev/null\n" > ~/.ssh/config
+
+    - echo "[webservers]" > inventory.ini
+    - IFS=',' read -ra IPS <<< "$VM_PRIVATE_IPS"
+    - for ip in "${IPS[@]}"; do echo "$ip" >> inventory.ini; done
+
+    - echo "" >> inventory.ini
+    - echo "[webservers:vars]" >> inventory.ini
+    - echo "ansible_user=debian" >> inventory.ini
+    - echo "ansible_ssh_common_args='-o ProxyJump=root@$BASTION_IP'" >> inventory.ini
+
+    - ansible-playbook ansible/install_nginx.yml -i inventory.ini -vv
