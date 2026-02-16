@@ -1,0 +1,102 @@
+---
+- name: Installation de Proxmox VE sur Debian 12 Bookworm
+  hosts: proxmox
+  become: true
+
+  vars:
+    proxmox_repo: "deb [signed-by=/usr/share/keyrings/proxmox-archive-keyring.gpg] http://download.proxmox.com/debian/pve bookworm pve-no-subscription"
+    proxmox_keyring: "/usr/share/keyrings/proxmox-archive-keyring.gpg"
+    reboot_enabled: true
+
+  tasks:
+    # --- FIX RÉSEAU & CONNECTIVITÉ ---
+    - name: Fix - Force APT to use IPv4 (évite l'erreur Network Unreachable)
+      ansible.builtin.copy:
+        content: 'Acquire::ForceIPv4 "true";'
+        dest: /etc/apt/apt.conf.d/99force-ipv4
+        mode: '0644'
+
+    - name: Fix - Configuration DNS robuste
+      ansible.builtin.copy:
+        content: |
+          nameserver 8.8.8.8
+          nameserver 1.1.1.1
+        dest: /etc/resolv.conf
+        mode: '0644'
+
+    - name: Disable IPv6 (sysctl)
+      ansible.posix.sysctl:
+        name: "{{ item }}"
+        value: '1'
+        state: present
+        reload: yes
+      with_items:
+        - net.ipv6.conf.all.disable_ipv6
+        - net.ipv6.conf.default.disable_ipv6
+
+    # --- NETTOYAGE DÉPÔTS ENTERPRISE ---
+    - name: Remove enterprise repo file if exists
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/pve-enterprise.list
+        state: absent
+      ignore_errors: yes
+
+    - name: Remove any enterprise repo entries in sources.list
+      ansible.builtin.replace:
+        path: /etc/apt/sources.list
+        regexp: '^deb .*enterprise\.proxmox\.com.*'
+        replace: '# \g<0>'
+      ignore_errors: yes
+
+    # --- CONFIGURATION PROXMOX ---
+    - name: Install required packages (wget, gnupg)
+      ansible.builtin.apt:
+        name:
+          - wget
+          - gnupg
+          - ca-certificates
+        state: present
+        update_cache: yes
+
+    - name: Download Proxmox GPG key
+      ansible.builtin.shell: |
+        wget -qO - http://download.proxmox.com/debian/proxmox-release-bookworm.gpg \
+        | gpg --dearnor -o {{ proxmox_keyring }}
+      args:
+        creates: "{{ proxmox_keyring }}"
+
+    - name: Add Proxmox no-subscription repository
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/pve-install-repo.list
+        content: "{{ proxmox_repo }}"
+        mode: '0644'
+
+    - name: Update APT cache with retries
+      ansible.builtin.apt:
+        update_cache: yes
+      register: apt_update
+      until: apt_update is success
+      retries: 5
+      delay: 10
+
+    - name: Full upgrade system (dist-upgrade)
+      ansible.builtin.apt:
+        upgrade: dist
+
+    - name: Install Proxmox VE
+      ansible.builtin.apt:
+        name: proxmox-ve
+        state: present
+      notify: Reboot server
+
+    - name: Remove Debian kernel if present
+      ansible.builtin.apt:
+        name: linux-image-amd64
+        state: absent
+      ignore_errors: yes
+
+  handlers:
+    - name: Reboot server
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+      when: reboot_enabled | bool
