@@ -1,91 +1,76 @@
 ---
-- name: Installation de Proxmox VE sur Debian 12 Bookworm
+- name: Installation Proxmox VE - Diagnostic et Déploiement
   hosts: proxmox
   become: true
 
   vars:
-    # Changement vers HTTPS pour contourner les blocages potentiels du port 80
+    # On utilise HTTPS partout pour maximiser les chances de passage
     proxmox_repo: "deb [signed-by=/usr/share/keyrings/proxmox-archive-keyring.gpg] https://download.proxmox.com/debian/pve bookworm pve-no-subscription"
     proxmox_keyring: "/usr/share/keyrings/proxmox-archive-keyring.gpg"
-    reboot_enabled: true
 
   tasks:
-    # --- 1. RÉSEAU & CONNECTIVITÉ ---
-    - name: Force APT to use IPv4
-      ansible.builtin.copy:
-        content: 'Acquire::ForceIPv4 "true";'
-        dest: /etc/apt/apt.conf.d/99force-ipv4
-        mode: '0644'
+    # --- ÉTAPE 0 : DIAGNOSTIC RÉSEAU ---
+    - name: "DIAGNOSTIC : Test de connexion HTTPS vers Proxmox"
+      ansible.builtin.wait_for:
+        host: download.proxmox.com
+        port: 443
+        timeout: 10
+        msg: "ERREUR : Le port 443 vers Proxmox est bloqué. Vérifiez votre Pare-feu ou Bastion."
 
-    - name: Configuration DNS (Google + Cloudflare)
-      ansible.builtin.copy:
-        content: |
-          nameserver 8.8.8.8
-          nameserver 1.1.1.1
-        dest: /etc/resolv.conf
-        mode: '0644'
+    # --- ÉTAPE 1 : RÉPARATION ET DNS ---
+    - name: "Nettoyage : Débloquer DPKG si nécessaire"
+      ansible.builtin.shell: |
+        rm -f /var/lib/dpkg/lock-frontend
+        rm -f /var/lib/apt/lists/lock
+        dpkg --configure -a
+      ignore_errors: yes
 
-    - name: Désactivation d'IPv6
-      ansible.posix.sysctl:
-        name: "{{ item }}"
-        value: '1'
-        state: present
-        reload: yes
+    - name: "Réseau : Forcer IPv4 et DNS Google"
+      ansible.builtin.copy:
+        dest: "{{ item.dest }}"
+        content: "{{ item.content }}"
       with_items:
-        - net.ipv6.conf.all.disable_ipv6
-        - net.ipv6.conf.default.disable_ipv6
+        - { dest: '/etc/apt/apt.conf.d/99force-ipv4', content: 'Acquire::ForceIPv4 "true";' }
+        - { dest: '/etc/resolv.conf', content: "nameserver 8.8.8.8\nnameserver 1.1.1.1" }
 
-    # --- 2. PRÉPARATION SYSTÈME ---
-    - name: Configurer /etc/hosts
+    - name: "Réseau : Configurer /etc/hosts (Obligatoire pour Proxmox)"
       ansible.builtin.lineinfile:
         path: /etc/hosts
         line: "{{ ansible_default_ipv4.address }} {{ ansible_hostname }}.local {{ ansible_hostname }}"
         regexp: "^{{ ansible_default_ipv4.address }}"
         state: present
 
-    - name: Installer les prérequis (wget, gnupg, apt-transport-https)
+    # --- ÉTAPE 2 : PRÉPARATION DES DÉPÔTS ---
+    - name: "Dépôts : Installer les certificats CA et Wget"
       ansible.builtin.apt:
-        name: [wget, gnupg, ca-certificates, apt-transport-https]
+        name: [ca-certificates, wget, gnupg, apt-transport-https]
         state: present
         update_cache: yes
 
-    - name: Télécharger la clé GPG Proxmox
+    - name: "Dépôts : Ajouter la clé GPG Proxmox"
       ansible.builtin.shell: |
-        wget -qO - https://download.proxmox.com/debian/proxmox-release-bookworm.gpg \
-        | gpg --dearmor -o {{ proxmox_keyring }}
+        wget -qO - https://download.proxmox.com/debian/proxmox-release-bookworm.gpg | gpg --dearmor -o {{ proxmox_keyring }}
       args:
         creates: "{{ proxmox_keyring }}"
 
-    - name: Ajouter le dépôt Proxmox (HTTPS)
+    - name: "Dépôts : Configurer le fichier source Proxmox"
       ansible.builtin.copy:
         dest: /etc/apt/sources.list.d/pve-install-repo.list
         content: "{{ proxmox_repo }}"
-        mode: '0644'
 
-    # --- 3. MISE À JOUR & INSTALLATION ---
-    - name: Nettoyer le cache APT et mettre à jour
-      ansible.builtin.shell: apt-get clean && apt-get update
-      register: apt_update
-      until: apt_update is success
-      retries: 5
-      delay: 15
-
-    - name: Full Upgrade (dist-upgrade)
+    # --- ÉTAPE 3 : INSTALLATION ---
+    - name: "Système : Mise à jour complète (dist-upgrade)"
       ansible.builtin.apt:
         upgrade: dist
         update_cache: yes
 
-    - name: Installer Proxmox VE
+    - name: "Proxmox : Installation des paquets principaux"
       ansible.builtin.apt:
-        name: 
-          - proxmox-ve
-          - postfix
-          - open-iscsi
+        name: [proxmox-ve, postfix, open-iscsi]
         state: present
-      notify: Reboot server
+      notify: Redémarrage final
 
   handlers:
-    - name: Reboot server
+    - name: Redémarrage final
       ansible.builtin.reboot:
         reboot_timeout: 600
-      when: reboot_enabled | bool
