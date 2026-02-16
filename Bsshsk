@@ -4,64 +4,88 @@
   become: true
 
   vars:
-    proxmox_repo: "deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription"
+    # Changement vers HTTPS pour contourner les blocages potentiels du port 80
+    proxmox_repo: "deb [signed-by=/usr/share/keyrings/proxmox-archive-keyring.gpg] https://download.proxmox.com/debian/pve bookworm pve-no-subscription"
     proxmox_keyring: "/usr/share/keyrings/proxmox-archive-keyring.gpg"
-    reboot_enabled: false
+    reboot_enabled: true
 
   tasks:
+    # --- 1. RÉSEAU & CONNECTIVITÉ ---
+    - name: Force APT to use IPv4
+      ansible.builtin.copy:
+        content: 'Acquire::ForceIPv4 "true";'
+        dest: /etc/apt/apt.conf.d/99force-ipv4
+        mode: '0644'
 
-    - name: Disable IPv6
-      sysctl:
-        name: net.ipv6.conf.all.disable_ipv6
+    - name: Configuration DNS (Google + Cloudflare)
+      ansible.builtin.copy:
+        content: |
+          nameserver 8.8.8.8
+          nameserver 1.1.1.1
+        dest: /etc/resolv.conf
+        mode: '0644'
+
+    - name: Désactivation d'IPv6
+      ansible.posix.sysctl:
+        name: "{{ item }}"
         value: '1'
         state: present
         reload: yes
+      with_items:
+        - net.ipv6.conf.all.disable_ipv6
+        - net.ipv6.conf.default.disable_ipv6
 
-    - name: Installer prérequis
-      apt:
-        name:
-          - wget
-          - gnupg
-          - ca-certificates
+    # --- 2. PRÉPARATION SYSTÈME ---
+    - name: Configurer /etc/hosts
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ ansible_default_ipv4.address }} {{ ansible_hostname }}.local {{ ansible_hostname }}"
+        regexp: "^{{ ansible_default_ipv4.address }}"
+        state: present
+
+    - name: Installer les prérequis (wget, gnupg, apt-transport-https)
+      ansible.builtin.apt:
+        name: [wget, gnupg, ca-certificates, apt-transport-https]
         state: present
         update_cache: yes
 
-    ############################################################
-    # 🔥 Méthode officielle recommandée Proxmox
-    ############################################################
-    - name: Télécharger clé Proxmox (méthode robuste)
-      shell: |
-        wget -qO - http://download.proxmox.com/debian/proxmox-release-bookworm.gpg \
+    - name: Télécharger la clé GPG Proxmox
+      ansible.builtin.shell: |
+        wget -qO - https://download.proxmox.com/debian/proxmox-release-bookworm.gpg \
         | gpg --dearmor -o {{ proxmox_keyring }}
       args:
         creates: "{{ proxmox_keyring }}"
 
-    - name: Ajouter dépôt Proxmox no-subscription
-      copy:
+    - name: Ajouter le dépôt Proxmox (HTTPS)
+      ansible.builtin.copy:
         dest: /etc/apt/sources.list.d/pve-install-repo.list
-        content: "deb [signed-by={{ proxmox_keyring }}] http://download.proxmox.com/debian/pve bookworm pve-no-subscription\n"
+        content: "{{ proxmox_repo }}"
+        mode: '0644'
 
-    - name: Supprimer dépôt enterprise
-      file:
-        path: /etc/apt/sources.list.d/pve-enterprise.list
-        state: absent
+    # --- 3. MISE À JOUR & INSTALLATION ---
+    - name: Nettoyer le cache APT et mettre à jour
+      ansible.builtin.shell: apt-get clean && apt-get update
+      register: apt_update
+      until: apt_update is success
+      retries: 5
+      delay: 15
 
-    - name: Update APT
-      apt:
+    - name: Full Upgrade (dist-upgrade)
+      ansible.builtin.apt:
+        upgrade: dist
         update_cache: yes
 
-    - name: Upgrade système
-      apt:
-        upgrade: dist
-
     - name: Installer Proxmox VE
-      apt:
-        name: proxmox-ve
+      ansible.builtin.apt:
+        name: 
+          - proxmox-ve
+          - postfix
+          - open-iscsi
         state: present
-      notify: Maybe reboot server
+      notify: Reboot server
 
   handlers:
-    - name: Maybe reboot server
-      when: reboot_enabled | bool
-      reboot:
+    - name: Reboot server
+      ansible.builtin.reboot:
         reboot_timeout: 600
+      when: reboot_enabled | bool
