@@ -1,0 +1,94 @@
+---
+- name: Installation Proxmox VE sur Debian 12 (Bookworm)
+  hosts: all
+  become: true
+
+  vars:
+    proxmox_repo: "deb [signed-by=/usr/share/keyrings/proxmox-release-bookworm.gpg] http://download.proxmox.com/debian/pve bookworm pve-no-subscription"
+    proxmox_keyring: "/usr/share/keyrings/proxmox-release-bookworm.gpg"
+
+  tasks:
+
+  # --------------------------------------------------
+  # ÉTAPE 1 — Nettoyage ancien repo Proxmox
+  # --------------------------------------------------
+
+  - name: Remove old Proxmox repositories
+    file:
+      path: "{{ item }}"
+      state: absent
+    loop:
+      - /etc/apt/sources.list.d/pve-enterprise.list
+      - /etc/apt/sources.list.d/pve-install-repo.list
+
+  - name: Remove old Proxmox keyring
+    file:
+      path: "{{ proxmox_keyring }}"
+      state: absent
+
+  # --------------------------------------------------
+  # ÉTAPE 2 — Préparation système
+  # --------------------------------------------------
+
+  - name: Update Debian cache
+    apt:
+      update_cache: yes
+
+  - name: Install required packages
+    apt:
+      name:
+        - ca-certificates
+        - wget
+        - gnupg
+      state: present
+
+  # --------------------------------------------------
+  # ÉTAPE 3 — Ajouter clé GPG officielle (download.proxmox.com)
+  # --------------------------------------------------
+
+  - name: Download Proxmox GPG key
+    get_url:
+      url: http://download.proxmox.com/debian/proxmox-release-bookworm.gpg
+      dest: "{{ proxmox_keyring }}"
+      mode: '0644'
+
+  # --------------------------------------------------
+  # ÉTAPE 4 — Ajouter repo no-subscription
+  # --------------------------------------------------
+
+  - name: Configure Proxmox repository
+    copy:
+      dest: /etc/apt/sources.list.d/pve-install-repo.list
+      content: "{{ proxmox_repo }}\n"
+
+  - name: Update apt cache after adding Proxmox repo
+    apt:
+      update_cache: yes
+
+  # --------------------------------------------------
+  # ÉTAPE 5 — Dist upgrade
+  # --------------------------------------------------
+
+  - name: Perform dist-upgrade
+    apt:
+      upgrade: dist
+
+  # --------------------------------------------------
+  # ÉTAPE 6 — Installer Proxmox VE
+  # --------------------------------------------------
+
+  - name: Install Proxmox VE packages
+    apt:
+      name:
+        - proxmox-ve
+        - postfix
+        - open-iscsi
+      state: present
+
+  # --------------------------------------------------
+  # ÉTAPE 7 — Redémarrage
+  # --------------------------------------------------
+
+  - name: Reboot system after installation
+    reboot:
+      reboot_timeout: 600
