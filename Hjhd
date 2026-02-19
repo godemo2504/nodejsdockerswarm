@@ -1,0 +1,70 @@
+packer {
+  required_plugins {
+    qemu = {
+      version = ">= 1.0.0"
+      source  = "github.com/hashicorp/qemu"
+    }
+  }
+}
+
+source "qemu" "proxmox" {
+
+  iso_url      = "proxmox-ve_8.4-1.iso"
+  iso_checksum = "none"
+
+  output_directory = "output-proxmox"
+
+  accelerator = "kvm"
+  machine_type = "q35"
+  cpu_model    = "host"
+
+  format     = "qcow2"
+  disk_size  = "40G"
+
+  cpus   = 4
+  memory = 4096
+
+  headless = false
+
+  http_directory = "http"
+
+  boot_wait = "5s"
+
+  boot_command = [
+    "<esc><wait>",
+    "<down><wait>",
+    "e<wait>",
+    "<down><down><down><wait>",
+    "<end> auto=true url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/answer.toml<wait>",
+    "<f10>"
+  ]
+
+  ssh_username = "root"
+  ssh_password = "Proxmox123!"
+  ssh_timeout  = "30m"
+
+  shutdown_command = "shutdown -h now"
+}
+
+build {
+  sources = ["source.qemu.proxmox"]
+}
+
+
+
+
+[global]
+keyboard = "fr"
+hostname = "proxmox-template"
+fqdn = "proxmox-template.local"
+mailto = "admin@local"
+
+[root_password]
+password = "Proxmox123!"
+
+[network]
+source = "from-dhcp"
+
+[disk-setup]
+filesystem = "ext4"
+disk_list = ["sda"]
