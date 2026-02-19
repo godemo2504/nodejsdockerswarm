@@ -115,3 +115,15 @@ boot_command = [
   "<enter><wait>",
   "<ctrl-x>"
 ]
+
+
+boot_wait = "5s"
+
+boot_command = [
+  "e<wait>",
+  "<down><down><down><wait>",
+  "<end>",
+  " auto=true priority=critical url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/answer.toml",
+  "<enter><wait>",
+  "<ctrl-x>"
+]
