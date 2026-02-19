@@ -100,3 +100,18 @@ email = "admin@local"
 
 [ssh]
 enable = true
+
+
+
+boot_wait = "5s"
+
+boot_command = [
+  "<down><wait>",
+  "<enter><wait>",
+  "e<wait>",
+  "<down><down><down><wait>",
+  "<end>",
+  " auto=true url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/answer.toml",
+  "<enter><wait>",
+  "<ctrl-x>"
+]
