@@ -68,3 +68,14 @@ source = "from-dhcp"
 [disk-setup]
 filesystem = "ext4"
 disk_list = ["sda"]
+
+
+
+boot_command = [
+  "<esc><wait>",
+  "<enter><wait>",          # sélectionne Graphical installer
+  "e<wait>",
+  "<down><down><down><wait>",
+  "<end> auto=true url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/answer.toml<wait>",
+  "<f10>"
+]
