@@ -1,3 +1,12 @@
+boot_command = [
+  "<esc><wait>",
+  "e<wait>",
+  "<down><down><end>",
+  " auto url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/answer.toml",
+  "<ctrl+x>"
+]
+
+
 📁 Structure projet
 Copier le code
 
