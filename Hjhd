@@ -79,3 +79,24 @@ boot_command = [
   "<end> auto=true url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/answer.toml<wait>",
   "<f10>"
 ]
+
+
+[global]
+keyboard = "fr"
+timezone = "Europe/Paris"
+fqdn = "proxmox.local"
+mailto = "admin@local"
+accept_eula = true
+
+[network]
+source = "from-dhcp"
+
+[disk-setup]
+filesystem = "ext4"
+
+[user]
+password = "Proxmox123!"
+email = "admin@local"
+
+[ssh]
+enable = true
