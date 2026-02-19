@@ -1,0 +1,71 @@
+proxmox.pkr.hcl
+Hcl
+Copier le code
+packer {
+  required_plugins {
+    qemu = {
+      version = ">= 1.0.0"
+      source  = "github.com/hashicorp/qemu"
+    }
+  }
+}
+
+source "qemu" "proxmox" {
+  iso_url          = "proxmox-ve_8.x.iso"
+  iso_checksum     = "none"
+
+  output_directory = "output-proxmox"
+  shutdown_command = "shutdown -h now"
+
+  disk_size        = "20G"
+  format           = "raw"
+  accelerator      = "kvm"
+
+  http_directory   = "http"
+
+  boot_wait        = "10s"
+
+  boot_command = [
+    "<esc><wait>",
+    "auto <enter>"
+  ]
+}
+
+build {
+  sources = ["source.qemu.proxmox"]
+}
+🚀 3️⃣ Lancer le build
+Bash
+Copier le code
+packer init .
+packer build proxmox.pkr.hcl
+Résultat :
+Copier le code
+
+output-proxmox/disk.raw
+🔄 4️⃣ Conversion RAW → QCOW2
+Utilise qemu-img :
+Bash
+Copier le code
+qemu-img convert -f raw -O qcow2 \
+  output-proxmox/disk.raw \
+  proxmox-openstack.qcow2
+Vérifier :
+Bash
+Copier le code
+qemu-img info proxmox-openstack.qcow2
+
+
+
+Via CLI :
+Bash
+Copier le code
+openstack image create "proxmox-ve-8" \
+  --file proxmox-openstack.qcow2 \
+  --disk-format qcow2 \
+  --container-format bare \
+  --public
+Vérifier :
+Bash
+Copier le code
+openstack image list
