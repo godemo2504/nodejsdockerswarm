@@ -177,3 +177,12 @@ source "qemu" "proxmox" {
 build {
   sources = ["source.qemu.proxmox"]
 }
+
+
+
+boot_command = [
+  "c<wait2>",
+  "linux /boot/linux26 ro ramdisk_size=16777216 rw quiet splash=silent auto url=http://{{.HTTPIP}}:{{.HTTPPort}}/answer.toml<enter><wait>",
+  "initrd /boot/initrd.img<enter><wait>",
+  "boot<enter>"
+]
