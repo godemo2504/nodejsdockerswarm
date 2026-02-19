@@ -1,0 +1,95 @@
+📁 Structure projet
+Copier le code
+
+proxmox-packer/
+│
+├── proxmox.pkr.hcl
+├── http/
+│   └── answer.toml
+└── proxmox-ve_8.4-1.iso
+📄 1️⃣ Fichier Autoinstall : http/answer.toml
+Exemple minimal :
+TOML
+Copier le code
+[global]
+keyboard = "fr"
+hostname = "proxmox-template"
+fqdn = "proxmox.local"
+mailto = "admin@local"
+
+[root_password]
+password = "Proxmox123!"
+
+[network]
+source = "from-dhcp"
+
+[disk-setup]
+filesystem = "ext4"
+disk_list = ["sda"]
+📄 2️⃣ Fichier Packer : proxmox.pkr.hcl
+Hcl
+Copier le code
+packer {
+  required_plugins {
+    qemu = {
+      version = ">= 1.0.0"
+      source  = "github.com/hashicorp/qemu"
+    }
+  }
+}
+
+source "qemu" "proxmox" {
+
+  iso_url          = "proxmox-ve_8.4-1.iso"
+  iso_checksum     = "none"
+
+  output_directory = "output-proxmox"
+
+  accelerator      = "kvm"
+  format           = "raw"
+  disk_size        = "40G"
+
+  headless         = true
+
+  http_directory   = "http"
+
+  boot_wait        = "5s"
+
+  boot_command = [
+    "<esc><wait>",
+    "auto url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/answer.toml<enter>"
+  ]
+
+  ssh_username     = "root"
+  ssh_password     = "Proxmox123!"
+  ssh_timeout      = "30m"
+
+  shutdown_command = "shutdown -h now"
+}
+
+build {
+  sources = ["source.qemu.proxmox"]
+}
+🚀 3️⃣ Build
+Bash
+Copier le code
+packer init .
+packer build proxmox.pkr.hcl
+À la fin :
+Copier le code
+
+output-proxmox/disk.raw
+🔄 4️⃣ Conversion en QCOW2
+Bash
+Copier le code
+qemu-img convert -f raw -O qcow2 \
+  output-proxmox/disk.raw \
+  proxmox-openstack.qcow2
+☁ 5️⃣ Upload dans Glance
+Bash
+Copier le code
+openstack image create "proxmox-ve-8" \
+  --file proxmox-openstack.qcow2 \
+  --disk-format qcow2 \
+  --container-format bare \
+  --public
