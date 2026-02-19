@@ -186,3 +186,13 @@ boot_command = [
   "initrd /boot/initrd.img<enter><wait>",
   "boot<enter>"
 ]
+
+
+boot_command = [
+  "c<wait2>",
+  "linux /boot/linux26 ro ramdisk_size=16777216 rw quiet splash=silent ",
+  "auto url=http://{{.HTTPIP}}:{{.HTTPPort}}/answer.toml<wait>",
+  "<enter><wait2>",
+  "initrd /boot/initrd.img<enter><wait2>",
+  "boot<enter>"
+]
