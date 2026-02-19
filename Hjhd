@@ -127,3 +127,53 @@ boot_command = [
   "<enter><wait>",
   "<ctrl-x>"
 ]
+
+
+
+packer {
+  required_plugins {
+    qemu = {
+      version = ">= 1.0.0"
+      source  = "github.com/hashicorp/qemu"
+    }
+  }
+}
+
+source "qemu" "proxmox" {
+  iso_url      = "proxmox-ve_8.4-1.iso"
+  iso_checksum = "none"
+
+  output_directory = "output-proxmox"
+
+  accelerator  = "kvm"
+  machine_type = "q35"
+  cpu_model    = "host"
+
+  format    = "qcow2"
+  disk_size = "40G"
+
+  cpus   = 4
+  memory = 4096
+
+  headless = false
+
+  http_directory    = "http"
+  http_bind_address = "0.0.0.0"
+
+  boot_wait = "5s"
+
+  boot_command = [
+    "<esc><wait2>",
+    "auto url=http://${HTTPIP}:${HTTPPort}/answer.toml<enter><wait>"
+  ]
+
+  ssh_username = "root"
+  ssh_password = "Proxmox123!"
+  ssh_timeout  = "30m"
+
+  shutdown_command = "shutdown -h now"
+}
+
+build {
+  sources = ["source.qemu.proxmox"]
+}
